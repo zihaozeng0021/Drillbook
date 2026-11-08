@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Drillbook · 本地服务（只用 Python 标准库，无需安装任何依赖）
+DrillBook · 本地服务（只用 Python 标准库，无需安装任何依赖）
 
 用法：
   python server.py               启动服务并自动打开浏览器
@@ -549,7 +549,7 @@ def write_note(tid: str, page_id: str, content: str, base: str | None) -> tuple[
 # ───────────────────────────── HTTP 服务 ─────────────────────────────
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "Drillbook/2.0"
+    server_version = "DrillBook/2.0"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
@@ -717,7 +717,7 @@ def run_outline() -> int:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Drillbook 本地服务")
+    ap = argparse.ArgumentParser(description="DrillBook 本地服务")
     ap.add_argument("--port", type=int, default=8765, help="端口，默认 8765")
     ap.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     ap.add_argument("--check", action="store_true", help="只检查题库格式")
@@ -733,7 +733,7 @@ def main() -> None:
     RECORDS_DIR.mkdir(parents=True, exist_ok=True)
     httpd, port = make_server(args.port)
     url = f"http://127.0.0.1:{port}/"
-    print(f"Drillbook 已启动：{url}")
+    print(f"DrillBook 已启动：{url}")
     print(f"题库目录：{TOPICS_DIR}")
     print(f"作答记录：{RECORDS_DIR}")
     print("关闭此窗口或按 Ctrl+C 停止服务。")

@@ -10,7 +10,7 @@ export async function renderHome(app) {
   const root = h(
     'div',
     { class: 'home' },
-    h('header', { class: 'home-head' }, logo(), h('h1', null, 'Drillbook')),
+    h('header', { class: 'home-head' }, logo(), h('h1', null, 'DrillBook')),
     list,
   );
 
