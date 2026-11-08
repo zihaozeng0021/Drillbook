@@ -229,6 +229,7 @@ data/topics/
 - 专题 id 取范围较宽、以后不用改的名字：岗位用方向名（`backend`、`ai-agent-security`）而不是公司名；书用书名缩写（`csapp`、`ddia`）不带版次；课程用课号或课名（`mit-6-824`、`operating-systems`）不带学期。
 - 页面文件夹名 = 两位序号 + `-` + 页面 id。页面 id 在专题内唯一；序号只决定顺序。
 - 以 `_` 开头的文件夹不会被加载，可以当草稿用。
+- 页面文件夹里的 `_history/` 是用户在网页上编辑 `knowledge.md` 时自动保留的旧版本，加载时忽略；不要往里写东西。
 - 旧版名字 `data/positions/`、`position.json`、`jd.md` 和 `company` 字段仍能被读取，但新写的内容一律用新名字。
 
 ### topic.json

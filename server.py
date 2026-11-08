@@ -16,6 +16,7 @@ Drillbook · 本地服务（只用 Python 标准库，无需安装任何依赖�
                            （仍兼容旧名 data/positions/、position.json、jd.md）
   data/records/<专题>.jsonl 作答记录（每行一次作答，程序自动追加）
   data/notes/<专题>/<页面>.md 页面笔记（网页里编辑并自动保存，也可以直接用编辑器打开）
+  data/topics/<专题>/pages/<页面>/_history/  网页里编辑 knowledge.md 时自动保留的旧版本（加载时忽略）
 """
 from __future__ import annotations
 
@@ -57,7 +58,7 @@ KIND_LABEL = {"job": "岗位", "book": "书", "course": "课程", "exam": "考�
 RECORDS_DIR = DATA_DIR / "records"
 ARCHIVE_DIR = RECORDS_DIR / "archive"
 NOTES_DIR = DATA_DIR / "notes"
-NOTE_HISTORY_KEEP = 30     # 每个页面保留的旧版本数
+NOTE_HISTORY_KEEP = 30     # 每个页面的笔记 / 知识点文件保留的旧版本数
 NOTE_SNAPSHOT_GAP = 600    # 连续编辑时，至少间隔这么多秒才留一份旧版本
 
 ID_RE = re.compile(r"^[\w-]+$")                      # 专题 / 页面 / 知识点 / 题目 id
@@ -86,6 +87,7 @@ MIME = {
 
 records_lock = threading.Lock()
 notes_lock = threading.Lock()
+knowledge_lock = threading.Lock()
 
 
 # ───────────────────────────── 题库读取与校验 ─────────────────────────────
@@ -501,9 +503,8 @@ def read_note(tid: str, page_id: str) -> dict:
     return {"content": decode_note(raw), "hash": digest(raw), "size": len(raw), "path": f"data/notes/{tid}/{page_id}.md"}
 
 
-def snapshot_note(tid: str, page_id: str, old_raw: bytes, new_size: int) -> None:
-    """覆盖前把旧内容存到 _history/：连续编辑时每 10 分钟最多一份；内容一下少了一半以上（比如误删）时总会存。"""
-    hdir = NOTES_DIR / tid / "_history" / page_id
+def snapshot(hdir: Path, old_raw: bytes, new_size: int) -> None:
+    """覆盖前把旧内容存到 hdir：连续编辑时每 10 分钟最多一份；内容一下少了一半以上（比如误删）时总会存。"""
     snaps = sorted(hdir.glob("*.md")) if hdir.is_dir() else []
     recent = bool(snaps) and time.time() - snaps[-1].stat().st_mtime < NOTE_SNAPSHOT_GAP
     if recent and new_size >= len(old_raw) * 0.5:
@@ -531,7 +532,7 @@ def write_note(tid: str, page_id: str, content: str, base: str | None) -> tuple[
         if base is not None and base != current:
             return 409, {"error": "笔记文件已在别处修改", "content": decode_note(old_raw), "hash": current}
         if old_raw and old_raw != new_raw:
-            snapshot_note(tid, page_id, old_raw, len(new_raw))
+            snapshot(NOTES_DIR / tid / "_history" / page_id, old_raw, len(new_raw))
         if not content.strip():
             if path.exists():
                 path.unlink()
@@ -544,6 +545,71 @@ def write_note(tid: str, page_id: str, content: str, base: str | None) -> tuple[
             os.fsync(f.fileno())
         os.replace(tmp, path)  # 原子替换：保存过程中断电也不会留下半个文件
         return 200, {"hash": digest(new_raw), "size": len(new_raw)}
+
+
+# ───────────────────────────── 知识点文件编辑 ─────────────────────────────
+
+def page_dir_of(tdir: Path, page_id: str) -> Path | None:
+    for d in visible_dirs(tdir / "pages"):
+        m = PAGE_DIR_RE.match(d.name)
+        if (m.group(2) if m else d.name) == page_id:
+            return d
+    return None
+
+
+def read_knowledge(tid: str, page_dir: Path) -> dict:
+    path = page_dir / "knowledge.md"
+    with knowledge_lock:
+        raw = path.read_bytes() if path.is_file() else b""
+    return {"content": decode_note(raw), "hash": digest(raw), "size": len(raw), "path": f"{TOPICS_REL}/{tid}/pages/{page_dir.name}/knowledge.md"}
+
+
+def check_knowledge(page_dir: Path, old_text: str, new_text: str) -> list[dict]:
+    """保存后立即解析一遍：格式问题，以及被删掉或改名、却仍有题目关联的知识点 id。"""
+    issues = Issues()
+    where = f"{page_dir.name}/knowledge.md"
+    new_points = parse_knowledge(new_text, where, issues)[2]
+    old_points = parse_knowledge(old_text, where, Issues())[2] if old_text.strip() else []
+    removed = {p["id"] for p in old_points} - {p["id"] for p in new_points}
+    if removed:
+        refs: dict[str, int] = {}
+        qfile = page_dir / "questions.json"
+        try:
+            data = read_json(qfile) if qfile.exists() else []
+            if isinstance(data, dict):
+                data = data.get("questions") or []
+            for q in data if isinstance(data, list) else []:
+                pts = q.get("points") if isinstance(q, dict) else None
+                for r in ([pts] if isinstance(pts, str) else pts or []):
+                    refs[str(r)] = refs.get(str(r), 0) + 1
+        except Exception:
+            pass
+        for pid in sorted(removed):
+            if refs.get(pid):
+                issues.error(where, f"知识点 id「{pid}」被删除或改名，但本页仍有 {refs[pid]} 道题关联它")
+            else:
+                issues.warn(where, f"知识点 id「{pid}」被删除或改名，指向它的站内链接会失效")
+    return issues.items
+
+
+def write_knowledge(page_dir: Path, content: str, base: str | None) -> tuple[int, dict]:
+    path = page_dir / "knowledge.md"
+    new_raw = content.replace("\r\n", "\n").encode("utf-8")
+    with knowledge_lock:
+        old_raw = path.read_bytes() if path.is_file() else b""
+        current = digest(old_raw)
+        if base is not None and base != current:
+            return 409, {"error": "knowledge.md 已在别处修改", "content": decode_note(old_raw), "hash": current}
+        if old_raw and old_raw != new_raw:
+            snapshot(page_dir / "_history", old_raw, len(new_raw))
+        tmp = path.with_name(path.name + ".tmp")
+        with open(tmp, "wb") as f:
+            f.write(new_raw)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    issues = check_knowledge(page_dir, decode_note(old_raw), decode_note(new_raw))
+    return 200, {"hash": digest(new_raw), "size": len(new_raw), "issues": issues}
 
 
 # ───────────────────────────── HTTP 服务 ─────────────────────────────
@@ -643,6 +709,26 @@ class Handler(SimpleHTTPRequestHandler):
                         return self.send_json({"error": "缺少笔记内容 content"}, 400)
                     base = body.get("base") if isinstance(body.get("base"), str) else None
                     status, payload = write_note(tid, page_id, body["content"], base)
+                    return self.send_json(payload, status)
+
+            if len(parts) == 3 and parts[0] == "knowledge":
+                tid, page_id = parts[1], parts[2]
+                tdir = topic_dir(tid)
+                if not tdir:
+                    return self.send_json({"error": "专题不存在"}, 404)
+                pdir = page_dir_of(tdir, page_id) if ID_RE.match(page_id) else None
+                if not pdir:
+                    return self.send_json({"error": "页面不存在"}, 404)
+                if method == "GET":
+                    return self.send_json(read_knowledge(tid, pdir))
+                if method == "PUT":
+                    body = self.read_body()
+                    if not isinstance(body, dict) or not isinstance(body.get("content"), str):
+                        return self.send_json({"error": "缺少文件内容 content"}, 400)
+                    if not body["content"].strip():
+                        return self.send_json({"error": "内容不能为空；要删除页面请直接删除文件夹"}, 400)
+                    base = body.get("base") if isinstance(body.get("base"), str) else None
+                    status, payload = write_knowledge(pdir, body["content"], base)
                     return self.send_json(payload, status)
 
             return self.send_json({"error": "未知接口"}, 404)

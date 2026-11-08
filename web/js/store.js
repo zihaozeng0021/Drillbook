@@ -30,6 +30,11 @@ export async function getTopics(force = false) {
   return topicsCache;
 }
 
+// 知识点文件在网页里改过之后调用：下次进入专题时重新读取并解析
+export function invalidateTopic(tid) {
+  cache.delete(tid);
+}
+
 export async function getTopic(tid, force = false) {
   if (!force && cache.has(tid)) return cache.get(tid);
   const [bank, rec] = await Promise.all([api.topic(tid), api.records(tid)]);

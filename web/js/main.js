@@ -1,7 +1,7 @@
 // 入口与路由
 //   #/                          专题列表
 //   #/p/<专题>                  专题总览（p 是固定前缀，内容里的站内链接依赖它）
-//   #/p/<专题>/page/<页面>      知识点（?kp=<知识点> 定位到该知识点）
+//   #/p/<专题>/page/<页面>      知识点（?kp=<知识点> 定位到该知识点；?edit=1 编辑本页的 knowledge.md）
 //   #/p/<专题>/page/<页面>/quiz 本页练习
 //   #/p/<专题>/review           错题复习
 
@@ -53,6 +53,11 @@ async function route() {
     }
     const topic = await store.getTopic(tid);
     if (token !== routeToken) return;
+    if (shell && shell.topic !== topic) {
+      // 题库被重新载入（例如改了 knowledge.md）：外框持有的旧对象作废，重建
+      shell.destroy();
+      shell = null;
+    }
     if (!shell) shell = new Shell(app, topic);
 
     let name = 'overview';

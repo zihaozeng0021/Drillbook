@@ -5,6 +5,7 @@ import { md } from '../md.js';
 import * as store from '../store.js';
 import { STATE_LABEL, aggregateState } from '../rank.js';
 import { getSession, newSession, mountQuiz } from './quiz.js';
+import { mountKnowledgeEditor } from './editor.js';
 
 export function renderPage(main, topic, pageId, tab, params, shell) {
   const page = topic.pageById.get(pageId);
@@ -35,6 +36,17 @@ export function renderPage(main, topic, pageId, tab, params, shell) {
   paintNotesBtn();
   const offNotes = panel.onChange(paintNotesBtn);
 
+  // 编辑本页的 knowledge.md：?edit=1 进入编辑模式，退出按钮在编辑器里
+  const editing = tab === 'learn' && params.get('edit') === '1';
+  const editLink = editing
+    ? null
+    : h(
+        'a',
+        { class: 'notes-toggle edit-link', href: `${pageHref}?edit=1`, 'data-tip': '直接修改这一页的 knowledge.md' },
+        icon('edit'),
+        h('span', { class: 'lbl' }, '编辑'),
+      );
+
   const head = h(
     'header',
     { class: 'pg-head' },
@@ -64,13 +76,18 @@ export function renderPage(main, topic, pageId, tab, params, shell) {
           h('span', { class: 'tab-count num' }, page.questions.length),
         ),
       ),
-      notesBtn,
+      h('div', { class: 'pg-tools' }, editLink, notesBtn),
     ),
   );
   const body = h('div', { class: 'pg-body' });
   main.append(h('div', { class: 'page' }, head, body));
 
-  const view = tab === 'quiz' ? quizTab(body, topic, page, pageHref) : learnTab(body, topic, page, pageHref, params.get('kp'));
+  const view =
+    tab === 'quiz'
+      ? quizTab(body, topic, page, pageHref)
+      : editing
+        ? mountKnowledgeEditor(body, topic, page, pageHref)
+        : learnTab(body, topic, page, pageHref, params.get('kp'));
   return {
     destroy() {
       view.destroy?.();

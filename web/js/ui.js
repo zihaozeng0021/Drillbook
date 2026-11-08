@@ -37,6 +37,7 @@ const ICONS = {
   folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h3.8l2 2h7.2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
   play: '<path d="M8 5.5v13l10.5-6.5z"/>',
   note: '<path d="M15.2 4.8l4 4L9 19H5v-4z"/><path d="M13.2 6.8l4 4"/>',
+  edit: '<path d="M7 3.5h7l4.5 4.5v12.5h-11.5z"/><path d="M14 3.5v4.5h4.5"/><path d="M9.5 13h5M9.5 16.5h5"/>',
 };
 
 export function icon(name, cls = '') {

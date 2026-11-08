@@ -13,6 +13,7 @@ Content is organised into **topics**. A topic is one learning track built from o
 - **Quizzes**: every page has multiple-choice questions covering all of its points, and every answer is recorded. Choose “不会” (I don't know) to record an incorrect answer and avoid lucky guesses inflating your mastery.
 - **Mistake review** (错题复习): all questions ranked by recent error rate. Recent and repeated mistakes come first, unanswered questions sit in the middle, and questions you always get right go last. The ⓘ button on the review page shows the formula.
 - **Notes** (笔记): a Markdown notes panel on every page, saved as `.md` files you can also open in any editor.
+- **Edit in place**: the 编辑 button on a knowledge page opens that page's `knowledge.md` in an editor. Saving re-parses the page, warns when a removed knowledge point still has questions, and keeps earlier versions in the page folder's `_history/`.
 
 ### Start
 
@@ -65,7 +66,7 @@ Only `data/topics/sample/` is included in Git. Other topic folders, all answer h
 | `0` | Choose “不会” (I don't know) |
 | `Enter` | Submit, then go to the next question |
 | `←` `→` | Previous / next question |
-| `Ctrl+S` | Save notes now |
+| `Ctrl+S` | Save notes, or the knowledge file being edited |
 | `Esc` twice | Close the notes panel |
 
 ### Commands
@@ -91,6 +92,7 @@ python server.py --port 9000  Use a different port
 - **选择题**：每页的题目覆盖本页全部知识点，每次作答都会记录。选择「不会」按答错记录，避免蒙对影响掌握度。
 - **错题复习**：全部题目按近期错误率排序。最近错的、反复错的排在最前，没做过的在中间，一直答对的在最后。复习页的 ⓘ 按钮里有排序公式。
 - **笔记**：每页一个 Markdown 笔记面板，自动保存成 `.md` 文件，也可以用任何编辑器打开。
+- **页内编辑**：知识点页右上角的「编辑」直接修改这一页的 `knowledge.md`。保存后按新内容重新解析，删掉了仍有题目关联的知识点会提示，旧版本保留在页面文件夹的 `_history/`。
 
 ### 启动
 
@@ -143,7 +145,7 @@ Git 只收录 `data/topics/sample/`。其他专题目录、全部作答记录和
 | `0` | 选择「不会」 |
 | `Enter` | 提交，再按一次进入下一题 |
 | `←` `→` | 上一题 / 下一题 |
-| `Ctrl+S` | 立即保存笔记 |
+| `Ctrl+S` | 立即保存笔记，或正在编辑的知识点文件 |
 | 按两次 `Esc` | 关闭笔记面板 |
 
 ### 命令

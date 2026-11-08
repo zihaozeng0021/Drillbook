@@ -189,7 +189,7 @@ function insideFence(text) {
   return (text.match(/^\s*(```|~~~)/gm) || []).length % 2 === 1;
 }
 
-function continueList(ta) {
+export function continueList(ta) {
   const { value, selectionStart: s, selectionEnd: t } = ta;
   if (s !== t) return false;
   const ls = value.lastIndexOf('\n', s - 1) + 1;
@@ -213,7 +213,7 @@ function continueList(ta) {
   return false;
 }
 
-function indent(ta, outdent) {
+export function indent(ta, outdent) {
   const { value, selectionStart: s, selectionEnd: t } = ta;
   const ls = value.lastIndexOf('\n', s - 1) + 1;
   if (s === t && !outdent) {

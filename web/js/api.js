@@ -39,4 +39,6 @@ export const api = {
   archiveRecords: (tid) => request('POST', `/api/records/${enc(tid)}/archive`),
   note: (tid, pageId) => request('GET', `/api/notes/${enc(tid)}/${enc(pageId)}`),
   saveNote: (tid, pageId, body, opts) => request('PUT', `/api/notes/${enc(tid)}/${enc(pageId)}`, body, opts),
+  knowledge: (tid, pageId) => request('GET', `/api/knowledge/${enc(tid)}/${enc(pageId)}`),
+  saveKnowledge: (tid, pageId, body) => request('PUT', `/api/knowledge/${enc(tid)}/${enc(pageId)}`, body),
 };

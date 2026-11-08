@@ -2948,3 +2948,123 @@ button.rrow:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── 知识点文件编辑器 ───────────────────────────────────────────────────── */
+
+.pg-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kn-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kn-edit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.kn-edit-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.kn-edit-path {
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--font-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kn-edit-status {
+  white-space: nowrap;
+}
+
+.kn-edit-status.bad {
+  color: var(--weak);
+}
+
+.kn-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.kn-edit-input {
+  display: block;
+  width: 100%;
+  min-height: calc(100vh - 300px);
+  padding: 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  outline: none;
+  resize: vertical;
+  background: var(--panel);
+  color: var(--text);
+  caret-color: var(--signal);
+  font-family: var(--font-code);
+  font-size: 13.5px;
+  line-height: 1.8;
+  tab-size: 2;
+}
+
+.kn-edit-input:focus {
+  border-color: var(--line-2);
+}
+
+.kn-edit-banner {
+  padding: 12px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--panel);
+  font-size: 13px;
+}
+
+.kn-edit-banner.bad {
+  border-color: rgba(255, 111, 135, 0.4);
+  background: rgba(255, 111, 135, 0.07);
+}
+
+.kn-edit-banner.warn {
+  border-color: rgba(243, 184, 87, 0.4);
+  background: rgba(243, 184, 87, 0.07);
+}
+
+.kn-edit-banner p {
+  margin: 0;
+}
+
+.kn-edit-banner ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.kn-edit-banner .lvl {
+  margin-right: 4px;
+  color: var(--text-3);
+}
+
+.kn-edit-banner .acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.kn-edit-hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
