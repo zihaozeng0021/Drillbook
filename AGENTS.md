@@ -45,7 +45,7 @@
 2. 读每个专题的 `topic.json` 和 `source.md`，弄清它的类型（`kind`）、出处和覆盖范围。
 3. 需要判断某个主题讲到多深时，再打开对应页面的 `knowledge.md`。
 
-> `data/topics/sample/` 是公开仓库 `zihaozeng0021/DrillBook` 里的 AI Agent 开发演示，不参与真实来源的重叠分析。只有这个专题目录会提交到 Git；其他专题、作答记录和笔记默认忽略。真实内容必须写到其他专题 id 下，不要把私人 JD、知识点或题目填进 Sample，也不要为了提交私人内容修改忽略规则或强制添加。
+> `data/topics/sample/` 是公开仓库 `zihaozeng0021/Drillbook` 里的 AI Agent 开发演示，不参与真实来源的重叠分析。只有这个专题目录会提交到 Git；其他专题、作答记录和笔记默认忽略。真实内容必须写到其他专题 id 下，不要把私人 JD、知识点或题目填进 Sample，也不要为了提交私人内容修改忽略规则或强制添加。
 
 如果 `data/topics/sample/` 还在：它只是格式示例。加入第一个真实专题时删掉它，同时删掉只属于示例的 `data/records/sample.jsonl` 和 `data/notes/sample/`（如果存在）。
 
