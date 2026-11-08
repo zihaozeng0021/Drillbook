@@ -1,5 +1,5 @@
 /* ==========================================================================
-   面试准备 · 样式
+   Drillbook · 样式
    颜色只用来表达数据：薄弱 / 一般 / 掌握 / 未做；操作色为浅天蓝
    ========================================================================== */
 
@@ -452,7 +452,7 @@ select {
   color: var(--text-2);
 }
 
-.side-pos {
+.side-topic {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -460,14 +460,14 @@ select {
   padding: 4px 10px;
 }
 
-.side-pos .name {
+.side-topic .name {
   color: var(--text);
   font-size: 17px;
   font-weight: 700;
   line-height: 1.35;
 }
 
-.side-pos .co {
+.side-topic .co {
   color: var(--text-3);
   font-size: 12.5px;
 }
@@ -643,7 +643,7 @@ select {
   color: var(--text-2);
 }
 
-/* ── 岗位列表 ─────────────────────────────────────────────────────────── */
+/* ── 专题列表 ─────────────────────────────────────────────────────────── */
 
 .home {
   max-width: 1080px;
@@ -669,13 +669,13 @@ select {
   letter-spacing: 0.02em;
 }
 
-.pos-list {
+.topic-list {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.pos-row {
+.topic-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 380px);
   align-items: center;
@@ -687,18 +687,18 @@ select {
   transition: border-color 0.15s, background-color 0.15s;
 }
 
-.pos-row:hover {
+.topic-row:hover {
   border-color: var(--line-2);
   background: var(--panel-2);
 }
 
-.pos-info h2 {
+.topic-info h2 {
   font-size: 24px;
   font-weight: 700;
   line-height: 1.3;
 }
 
-.pos-sub {
+.topic-sub {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
@@ -707,7 +707,21 @@ select {
   font-size: 14px;
 }
 
-.pos-stats {
+/* 专题类型标签（岗位 / 书 / 课程 / 考试）：中性边框，不占用状态色 */
+.kind-tag {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  padding: 0 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.topic-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 26px;
@@ -734,7 +748,7 @@ select {
   color: var(--weak);
 }
 
-.pos-issues {
+.topic-issues {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -742,17 +756,17 @@ select {
   font-size: 13px;
 }
 
-.pos-cells {
+.topic-cells {
   justify-content: flex-end;
   align-content: center;
 }
 
-.pos-cells .cell {
+.topic-cells .cell {
   width: 10px;
   height: 10px;
 }
 
-/* ── 岗位总览 ─────────────────────────────────────────────────────────── */
+/* ── 专题总览 ─────────────────────────────────────────────────────────── */
 
 .overview {
   max-width: 1120px;
@@ -907,7 +921,7 @@ select {
 }
 
 .peek,
-.jd {
+.source {
   padding: 20px 22px;
 }
 
@@ -948,7 +962,7 @@ select {
   font-size: 13px;
 }
 
-.jd-body {
+.source-body {
   max-height: 340px;
   overflow-y: auto;
   font-size: 14px;
@@ -2841,13 +2855,13 @@ button.rrow:hover {
     padding: 36px 16px 80px;
   }
 
-  .pos-row {
+  .topic-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 20px;
     padding: 22px 20px;
   }
 
-  .pos-cells {
+  .topic-cells {
     justify-content: flex-start;
   }
 

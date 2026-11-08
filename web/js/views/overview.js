@@ -1,42 +1,45 @@
-// 岗位总览：题目状态矩阵、错题预览、岗位 JD、数据管理
+// 专题总览：题目状态矩阵、错题预览、来源（JD / 书目 / 大纲）、数据管理
 
-import { h, icon, cell, plainText, modal, confirmDialog, toast } from '../ui.js';
+import { h, icon, cell, plainText, modal, confirmDialog, toast, kindTag } from '../ui.js';
 import { md } from '../md.js';
 import * as store from '../store.js';
 import { STATES, STATE_LABEL } from '../rank.js';
 
+// 来源面板的标题按专题类型变化；未知类型统一叫「来源」
+const SOURCE_TITLE = { job: '岗位要求', book: '书目与范围', course: '课程大纲', exam: '考试大纲' };
 let animated = false; // 矩阵点亮动画每次打开应用只播放一次
 
-export function renderOverview(main, pos) {
-  const base = `#/p/${encodeURIComponent(pos.id)}`;
+export function renderOverview(main, topic) {
+  const base = `#/p/${encodeURIComponent(topic.id)}`;
   const root = h('div', { class: 'overview' });
   main.append(root);
 
   function render() {
-    const s = store.stats(pos);
-    const c = store.counts(pos);
-    const total = pos.questions.length;
-    const answered = store.answeredCount(pos);
+    const s = store.stats(topic);
+    const c = store.counts(topic);
+    const total = topic.questions.length;
+    const answered = store.answeredCount(topic);
 
     // ── 头部 ──
     const head = h(
       'header',
       { class: 'ov-head' },
-      h('h1', null, pos.name),
-      pos.company || pos.description
+      h('h1', null, topic.name),
+      topic.kind || topic.origin || topic.description
         ? h(
             'p',
             { class: 'ov-sub' },
-            pos.company ? h('span', null, pos.company) : null,
-            pos.description ? h('span', null, pos.description) : null,
+            kindTag(topic.kind),
+            topic.origin ? h('span', null, topic.origin) : null,
+            topic.description ? h('span', null, topic.description) : null,
           )
         : null,
     );
 
     // ── 状态矩阵 ──
     let i = 0;
-    const rows = pos.pages.map((page) => {
-      const done = store.answeredCount(pos, page.questions);
+    const rows = topic.pages.map((page) => {
+      const done = store.answeredCount(topic, page.questions);
       return h(
         'a',
         { class: 'mx-row', href: `${base}/page/${encodeURIComponent(page.id)}` },
@@ -78,12 +81,12 @@ export function renderOverview(main, pos) {
         ),
         h('span', { class: 'mx-progress' }, '已做 ', h('b', { class: 'num' }, answered), h('span', { class: 'num' }, ` / ${total}`)),
       ),
-      rows.length ? h('div', { class: 'mx-rows' }, rows) : h('p', { class: 'muted' }, `还没有页面。在 ${pos.path}/pages/ 下新建 01-xxx 文件夹。`),
+      rows.length ? h('div', { class: 'mx-rows' }, rows) : h('p', { class: 'muted' }, `还没有页面。在 ${topic.path}/pages/ 下新建 01-xxx 文件夹。`),
     );
     animated = true;
 
     // ── 错题预览 ──
-    const top = store.ranked(pos).slice(0, 6);
+    const top = store.ranked(topic).slice(0, 6);
     const peek = h(
       'section',
       { class: 'panel peek' },
@@ -94,7 +97,7 @@ export function renderOverview(main, pos) {
             { class: 'peek-list' },
             top.map((q) => {
               const st = s.get(q.gid);
-              const page = pos.pageById.get(q.pageId);
+              const page = topic.pageById.get(q.pageId);
               return h(
                 'li',
                 null,
@@ -111,42 +114,42 @@ export function renderOverview(main, pos) {
         : h('p', { class: 'muted' }, '还没有题目。'),
     );
 
-    // ── 岗位 JD ──
-    const jd = pos.jd
+    // ── 来源：JD / 书目 / 课程大纲 ──
+    const source = topic.source
       ? h(
           'section',
-          { class: 'panel jd' },
-          h('div', { class: 'panel-head' }, h('h2', null, '岗位要求')),
-          h('div', { class: 'md jd-body', html: md(pos.jd) }),
+          { class: 'panel source' },
+          h('div', { class: 'panel-head' }, h('h2', null, SOURCE_TITLE[topic.kind] || '来源')),
+          h('div', { class: 'md source-body', html: md(topic.source) }),
         )
       : null;
 
     // ── 数据管理 ──
-    const errors = pos.issues.filter((x) => x.level === 'error').length;
+    const errors = topic.issues.filter((x) => x.level === 'error').length;
     const foot = h(
       'footer',
       { class: 'ov-foot' },
-      h('span', { class: 'path', 'data-tip': '题库文件夹（相对项目根目录）' }, icon('folder'), pos.path),
-      pos.issues.length
+      h('span', { class: 'path', 'data-tip': '题库文件夹（相对项目根目录）' }, icon('folder'), topic.path),
+      topic.issues.length
         ? h(
             'button',
             { class: `link-btn ${errors ? 'tone-weak' : 'tone-fair'}`, onclick: showIssues },
             icon('warn'),
-            `题库检查：${pos.issues.length} 项需要处理`,
+            `题库检查：${topic.issues.length} 项需要处理`,
           )
         : null,
-      pos.skippedRecords ? h('span', { class: 'tone-fair' }, `${pos.skippedRecords} 行作答记录格式无效，已跳过`) : null,
+      topic.skippedRecords ? h('span', { class: 'tone-fair' }, `${topic.skippedRecords} 行作答记录格式无效，已跳过`) : null,
       h('button', { class: 'link-btn', onclick: reset }, icon('retry'), '重置作答记录'),
     );
 
-    root.replaceChildren(head, matrix, h('div', { class: 'ov-grid' }, peek, jd), foot);
+    root.replaceChildren(head, matrix, h('div', { class: 'ov-grid' }, peek, source), foot);
   }
 
   function showIssues() {
     const list = h(
       'ul',
       { class: 'issues' },
-      pos.issues.map((it) =>
+      topic.issues.map((it) =>
         h(
           'li',
           { class: it.level },
@@ -165,7 +168,7 @@ export function renderOverview(main, pos) {
   }
 
   async function reset() {
-    const n = [...pos.attempts.values()].reduce((a, l) => a + l.length, 0);
+    const n = [...topic.attempts.values()].reduce((a, l) => a + l.length, 0);
     const ok = await confirmDialog({
       title: '重置作答记录？',
       body: `当前共有 ${n} 条作答记录。重置后所有题目回到“未做”，原记录文件会移到 data/records/archive/ 保存，不会删除。`,
@@ -174,7 +177,7 @@ export function renderOverview(main, pos) {
     });
     if (!ok) return;
     try {
-      const archived = await store.resetRecords(pos);
+      const archived = await store.resetRecords(topic);
       toast(archived ? `已重置，旧记录保存在 ${archived}` : '已重置', 'ok', 4000);
       render();
     } catch (e) {
@@ -183,6 +186,6 @@ export function renderOverview(main, pos) {
   }
 
   render();
-  const off = store.on('records', (p) => p === pos && render());
+  const off = store.on('records', (p) => p === topic && render());
   return { destroy: off };
 }

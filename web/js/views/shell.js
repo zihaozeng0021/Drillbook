@@ -1,26 +1,27 @@
-// 岗位内的外框：左侧导航（页面列表 + 错题复习），右侧内容区
+// 专题内的外框：左侧导航（页面列表 + 错题复习），右侧内容区
 
-import { h, icon, logo, stateBar } from '../ui.js';
+import { h, icon, logo, stateBar, kindLabel } from '../ui.js';
 import * as store from '../store.js';
 import { NotesPanel } from './notes.js';
 
 export class Shell {
-  constructor(app, pos) {
-    this.pid = pos.id;
-    this.pos = pos;
+  constructor(app, topic) {
+    this.tid = topic.id;
+    this.topic = topic;
     this.active = { name: 'overview', pageId: null };
 
     this.nav = h('nav', { class: 'side-nav', 'aria-label': '页面' });
     this.sync = h('div', { class: 'side-sync' });
+    const subline = [kindLabel(topic.kind), topic.origin].filter(Boolean).join(' · ');
     this.side = h(
       'aside',
       { class: 'side' },
-      h('a', { class: 'brand', href: '#/' }, logo(), h('span', null, '全部岗位')),
+      h('a', { class: 'brand', href: '#/' }, logo(), h('span', null, '全部专题')),
       h(
         'a',
-        { class: 'side-pos', href: `#/p/${encodeURIComponent(pos.id)}` },
-        h('span', { class: 'name' }, pos.name),
-        pos.company ? h('span', { class: 'co' }, pos.company) : null,
+        { class: 'side-topic', href: `#/p/${encodeURIComponent(topic.id)}` },
+        h('span', { class: 'name' }, topic.name),
+        subline ? h('span', { class: 'co' }, subline) : null,
       ),
       this.nav,
       this.sync,
@@ -31,14 +32,14 @@ export class Shell {
       'header',
       { class: 'topbar' },
       h('button', { class: 'icon-btn', 'aria-label': '打开导航', onclick: () => this.openDrawer() }, icon('menu')),
-      h('span', { class: 'topbar-title' }, pos.name),
+      h('span', { class: 'topbar-title' }, topic.name),
     );
     this.root = h('div', { class: 'shell' }, this.top, this.side, this.scrim, this.main);
     app.replaceChildren(this.root);
-    this.notes = new NotesPanel(this.root, pos);
+    this.notes = new NotesPanel(this.root, topic);
 
-    this.offRecords = store.on('records', (p) => p === this.pos && this.renderNav());
-    this.offPending = store.on('pending', (pid) => pid === this.pid && this.renderSync());
+    this.offRecords = store.on('records', (p) => p === this.topic && this.renderNav());
+    this.offPending = store.on('pending', (tid) => tid === this.tid && this.renderSync());
     this.renderNav();
     this.renderSync();
   }
@@ -47,14 +48,14 @@ export class Shell {
     this.active = { name, pageId };
     this.renderNav();
     this.closeDrawer();
-    this.notes.setPage(name === 'page' ? this.pos.pageById.get(pageId) : null);
+    this.notes.setPage(name === 'page' ? this.topic.pageById.get(pageId) : null);
   }
 
   renderNav() {
-    const pos = this.pos;
-    const base = `#/p/${encodeURIComponent(pos.id)}`;
+    const topic = this.topic;
+    const base = `#/p/${encodeURIComponent(topic.id)}`;
     const { name, pageId } = this.active;
-    const all = store.counts(pos);
+    const all = store.counts(topic);
 
     const items = [
       h(
@@ -65,8 +66,8 @@ export class Shell {
       ),
       h('div', { class: 'nav-sep' }),
     ];
-    for (const page of pos.pages) {
-      const c = store.counts(pos, page.questions);
+    for (const page of topic.pages) {
+      const c = store.counts(topic, page.questions);
       items.push(
         h(
           'a',
@@ -94,7 +95,7 @@ export class Shell {
   }
 
   renderSync() {
-    const n = store.pendingCount(this.pid);
+    const n = store.pendingCount(this.tid);
     if (!n) {
       this.sync.replaceChildren();
       return;
@@ -110,7 +111,7 @@ export class Shell {
           {
             class: 'link-btn',
             onclick: async () => {
-              const ok = await store.flushPending(this.pid);
+              const ok = await store.flushPending(this.tid);
               if (!ok) this.sync.querySelector('.sync-warn')?.classList.add('shake');
             },
           },

@@ -1,8 +1,8 @@
-# Only the public sample role is tracked; all other data stays local.
+# Only the public sample topic is tracked; all other data stays local.
 /data/*
-!/data/positions/
-/data/positions/*
-!/data/positions/sample/
+!/data/topics/
+/data/topics/*
+!/data/topics/sample/
 
 # Python bytecode
 __pycache__/

@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-面试准备 · 本地服务（只用 Python 标准库，无需安装任何依赖）
+Drillbook · 本地服务（只用 Python 标准库，无需安装任何依赖）
 
 用法：
   python server.py               启动服务并自动打开浏览器
   python server.py --port 9000   指定端口（默认 8765，被占用时自动顺延）
   python server.py --no-browser  不自动打开浏览器
   python server.py --check       只检查题库格式并输出问题，不启动服务
-  python server.py --outline     列出所有岗位 → 页面 → 知识点（及每个知识点的题数），不启动服务
+  python server.py --outline     列出所有专题 → 页面 → 知识点（及每个知识点的题数），不启动服务
 
 目录约定（数据格式详见 AGENTS.md）：
   web/                     前端页面
-  data/positions/<岗位>/   题库：position.json、jd.md、pages/<NN-页面>/{knowledge.md, questions.json}
-  data/records/<岗位>.jsonl 作答记录（每行一次作答，程序自动追加）
-  data/notes/<岗位>/<页面>.md 页面笔记（网页里编辑并自动保存，也可以直接用编辑器打开）
+  data/topics/<专题>/      题库：topic.json、source.md、pages/<NN-页面>/{knowledge.md, questions.json}
+                           （仍兼容旧名 data/positions/、position.json、jd.md）
+  data/records/<专题>.jsonl 作答记录（每行一次作答，程序自动追加）
+  data/notes/<专题>/<页面>.md 页面笔记（网页里编辑并自动保存，也可以直接用编辑器打开）
 """
 from __future__ import annotations
 
@@ -46,14 +47,20 @@ except Exception:
 ROOT = Path(__file__).resolve().parent
 WEB_DIR = ROOT / "web"
 DATA_DIR = ROOT / "data"
-POSITIONS_DIR = DATA_DIR / "positions"
+TOPICS_DIR = DATA_DIR / "topics"
+if not TOPICS_DIR.is_dir() and (DATA_DIR / "positions").is_dir():
+    TOPICS_DIR = DATA_DIR / "positions"  # 旧版目录名，继续支持
+TOPICS_REL = TOPICS_DIR.relative_to(ROOT).as_posix()
+META_FILES = ("topic.json", "position.json")  # 专题元数据；后者是旧名
+SOURCE_FILES = ("source.md", "jd.md")         # 来源原文（JD、目录、大纲）；后者是旧名
+KIND_LABEL = {"job": "岗位", "book": "书", "course": "课程", "exam": "考试"}
 RECORDS_DIR = DATA_DIR / "records"
 ARCHIVE_DIR = RECORDS_DIR / "archive"
 NOTES_DIR = DATA_DIR / "notes"
 NOTE_HISTORY_KEEP = 30     # 每个页面保留的旧版本数
 NOTE_SNAPSHOT_GAP = 600    # 连续编辑时，至少间隔这么多秒才留一份旧版本
 
-ID_RE = re.compile(r"^[\w-]+$")                      # 岗位 / 页面 / 知识点 / 题目 id
+ID_RE = re.compile(r"^[\w-]+$")                      # 专题 / 页面 / 知识点 / 题目 id
 TITLE_RE = re.compile(r"^#\s+(.+?)\s*$")              # knowledge.md 第一行：# 页面标题
 POINT_RE = re.compile(r"^##\s+(.+?)\s*(?:\{#([\w-]+)\})?\s*$")  # ## 知识点标题 {#id}
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
@@ -296,34 +303,43 @@ def load_page(page_dir: Path, issues: Issues) -> dict:
     }
 
 
-def position_dir(pid: str) -> Path | None:
-    if not pid or not ID_RE.match(pid) or pid.startswith(("_", ".")):
+def topic_dir(tid: str) -> Path | None:
+    if not tid or not ID_RE.match(tid) or tid.startswith(("_", ".")):
         return None
-    d = POSITIONS_DIR / pid
+    d = TOPICS_DIR / tid
     return d if d.is_dir() else None
 
 
-def load_position(pdir: Path) -> dict:
+def first_existing(parent: Path, names: tuple) -> Path | None:
+    """按顺序找第一个存在的文件：新文件名在前，旧名兜底。"""
+    for name in names:
+        f = parent / name
+        if f.is_file():
+            return f
+    return None
+
+
+def load_topic(tdir: Path) -> dict:
     issues = Issues()
     meta: dict = {}
-    mfile = pdir / "position.json"
-    if mfile.exists():
+    mfile = first_existing(tdir, META_FILES)
+    if mfile:
         try:
             meta = read_json(mfile)
         except json.JSONDecodeError as e:
-            issues.error("position.json", f"JSON 格式错误：第 {e.lineno} 行第 {e.colno} 列，{e.msg}")
+            issues.error(mfile.name, f"JSON 格式错误：第 {e.lineno} 行第 {e.colno} 列，{e.msg}")
         if not isinstance(meta, dict):
-            issues.error("position.json", "内容应为对象 {...}")
+            issues.error(mfile.name, "内容应为对象 {...}")
             meta = {}
     else:
-        issues.warn("position.json", "缺少 position.json，暂用文件夹名作为岗位名")
+        issues.warn("topic.json", "缺少 topic.json，暂用文件夹名作为专题名")
 
-    jd_file = pdir / "jd.md"
-    jd = read_text(jd_file).strip() if jd_file.exists() else None
+    sfile = first_existing(tdir, SOURCE_FILES)
+    source = read_text(sfile).strip() if sfile else None
 
     pages = []
     seen: set[str] = set()
-    for d in sorted(visible_dirs(pdir / "pages"), key=page_sort_key):
+    for d in sorted(visible_dirs(tdir / "pages"), key=page_sort_key):
         page = load_page(d, issues)
         if page["id"] in seen:
             issues.error(d.name, f"页面 id 重复：{page['id']}")
@@ -334,38 +350,41 @@ def load_position(pdir: Path) -> dict:
         issues.warn("pages", "还没有页面（在 pages/ 下新建 01-xxx 文件夹）")
 
     for page in pages:
-        nf = note_file(pdir.name, page["id"])
+        nf = note_file(tdir.name, page["id"])
         page["noteSize"] = nf.stat().st_size if nf.is_file() else 0
-    note_dir = NOTES_DIR / pdir.name
+    note_dir = NOTES_DIR / tdir.name
     if note_dir.is_dir():
         ids = {p["id"] for p in pages}
         for f in sorted(note_dir.glob("*.md")):
             if f.stem not in ids:
-                issues.warn(f"data/notes/{pdir.name}/{f.name}", "这份笔记没有对应的页面（页面 id 改过的话，把文件名改成新的页面 id）")
+                issues.warn(f"data/notes/{tdir.name}/{f.name}", "这份笔记没有对应的页面（页面 id 改过的话，把文件名改成新的页面 id）")
 
     return {
-        "id": pdir.name,
-        "name": str(meta.get("name") or pdir.name),
-        "company": str(meta.get("company") or ""),
+        "id": tdir.name,
+        "name": str(meta.get("name") or tdir.name),
+        "kind": str(meta.get("kind") or "").strip(),
+        "origin": str(meta.get("origin") or meta.get("company") or ""),  # company 是旧字段名
         "description": str(meta.get("description") or ""),
         "order": meta.get("order") if isinstance(meta.get("order"), (int, float)) else 0,
-        "jd": jd,
-        "path": f"data/positions/{pdir.name}",
+        "source": source,
+        "sourceFile": sfile.name if sfile else None,
+        "path": f"{TOPICS_REL}/{tdir.name}",
         "pages": pages,
         "issues": issues.items,
     }
 
 
-def list_positions() -> list[dict]:
+def list_topics() -> list[dict]:
     out = []
-    for d in visible_dirs(POSITIONS_DIR):
+    for d in visible_dirs(TOPICS_DIR):
         if not ID_RE.match(d.name):
             continue
-        p = load_position(d)
+        p = load_topic(d)
         out.append({
             "id": p["id"],
             "name": p["name"],
-            "company": p["company"],
+            "kind": p["kind"],
+            "origin": p["origin"],
             "description": p["description"],
             "order": p["order"],
             "pageCount": len(p["pages"]),
@@ -378,12 +397,12 @@ def list_positions() -> list[dict]:
 
 # ───────────────────────────── 作答记录 ─────────────────────────────
 
-def records_file(pid: str) -> Path:
-    return RECORDS_DIR / f"{pid}.jsonl"
+def records_file(tid: str) -> Path:
+    return RECORDS_DIR / f"{tid}.jsonl"
 
 
-def read_records(pid: str) -> tuple[list[dict], int]:
-    path = records_file(pid)
+def read_records(tid: str) -> tuple[list[dict], int]:
+    path = records_file(tid)
     out: list[dict] = []
     skipped = 0
     if not path.exists():
@@ -406,7 +425,7 @@ def read_records(pid: str) -> tuple[list[dict], int]:
     return out, skipped
 
 
-def append_records(pid: str, items: list) -> int:
+def append_records(tid: str, items: list) -> int:
     now = int(time.time() * 1000)
     clean = []
     for r in items:
@@ -432,7 +451,7 @@ def append_records(pid: str, items: list) -> int:
     if not clean:
         return 0
     RECORDS_DIR.mkdir(parents=True, exist_ok=True)
-    with records_lock, records_file(pid).open("a", encoding="utf-8", newline="\n") as f:
+    with records_lock, records_file(tid).open("a", encoding="utf-8", newline="\n") as f:
         for rec in clean:
             f.write(json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n")
         f.flush()
@@ -440,13 +459,13 @@ def append_records(pid: str, items: list) -> int:
     return len(clean)
 
 
-def archive_records(pid: str) -> str | None:
+def archive_records(tid: str) -> str | None:
     """重置 = 把记录文件移动到 data/records/archive/，不直接删除。"""
-    src = records_file(pid)
+    src = records_file(tid)
     if not src.exists():
         return None
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    name = f"{pid}-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
+    name = f"{tid}-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
     with records_lock:
         shutil.move(str(src), str(ARCHIVE_DIR / name))
     return f"data/records/archive/{name}"
@@ -454,16 +473,16 @@ def archive_records(pid: str) -> str | None:
 
 # ───────────────────────────── 页面笔记 ─────────────────────────────
 
-def page_ids(pdir: Path) -> set[str]:
+def page_ids(tdir: Path) -> set[str]:
     ids = set()
-    for d in visible_dirs(pdir / "pages"):
+    for d in visible_dirs(tdir / "pages"):
         m = PAGE_DIR_RE.match(d.name)
         ids.add(m.group(2) if m else d.name)
     return ids
 
 
-def note_file(pid: str, page_id: str) -> Path:
-    return NOTES_DIR / pid / f"{page_id}.md"
+def note_file(tid: str, page_id: str) -> Path:
+    return NOTES_DIR / tid / f"{page_id}.md"
 
 
 def digest(raw: bytes) -> str:
@@ -475,16 +494,16 @@ def decode_note(raw: bytes) -> str:
     return raw.decode("utf-8-sig", errors="replace").replace("\r\n", "\n")
 
 
-def read_note(pid: str, page_id: str) -> dict:
-    path = note_file(pid, page_id)
+def read_note(tid: str, page_id: str) -> dict:
+    path = note_file(tid, page_id)
     with notes_lock:
         raw = path.read_bytes() if path.is_file() else b""
-    return {"content": decode_note(raw), "hash": digest(raw), "size": len(raw), "path": f"data/notes/{pid}/{page_id}.md"}
+    return {"content": decode_note(raw), "hash": digest(raw), "size": len(raw), "path": f"data/notes/{tid}/{page_id}.md"}
 
 
-def snapshot_note(pid: str, page_id: str, old_raw: bytes, new_size: int) -> None:
+def snapshot_note(tid: str, page_id: str, old_raw: bytes, new_size: int) -> None:
     """覆盖前把旧内容存到 _history/：连续编辑时每 10 分钟最多一份；内容一下少了一半以上（比如误删）时总会存。"""
-    hdir = NOTES_DIR / pid / "_history" / page_id
+    hdir = NOTES_DIR / tid / "_history" / page_id
     snaps = sorted(hdir.glob("*.md")) if hdir.is_dir() else []
     recent = bool(snaps) and time.time() - snaps[-1].stat().st_mtime < NOTE_SNAPSHOT_GAP
     if recent and new_size >= len(old_raw) * 0.5:
@@ -503,8 +522,8 @@ def snapshot_note(pid: str, page_id: str, old_raw: bytes, new_size: int) -> None
             pass
 
 
-def write_note(pid: str, page_id: str, content: str, base: str | None) -> tuple[int, dict]:
-    path = note_file(pid, page_id)
+def write_note(tid: str, page_id: str, content: str, base: str | None) -> tuple[int, dict]:
+    path = note_file(tid, page_id)
     new_raw = content.replace("\r\n", "\n").encode("utf-8")
     with notes_lock:
         old_raw = path.read_bytes() if path.is_file() else b""
@@ -512,7 +531,7 @@ def write_note(pid: str, page_id: str, content: str, base: str | None) -> tuple[
         if base is not None and base != current:
             return 409, {"error": "笔记文件已在别处修改", "content": decode_note(old_raw), "hash": current}
         if old_raw and old_raw != new_raw:
-            snapshot_note(pid, page_id, old_raw, len(new_raw))
+            snapshot_note(tid, page_id, old_raw, len(new_raw))
         if not content.strip():
             if path.exists():
                 path.unlink()
@@ -530,7 +549,7 @@ def write_note(pid: str, page_id: str, content: str, base: str | None) -> tuple[
 # ───────────────────────────── HTTP 服务 ─────────────────────────────
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "InterviewPrep/1.0"
+    server_version = "Drillbook/2.0"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
@@ -586,44 +605,44 @@ class Handler(SimpleHTTPRequestHandler):
     def handle_api(self, method: str, path: str):
         parts = [unquote(p) for p in path.split("/")[2:] if p]
         try:
-            if method == "GET" and parts == ["positions"]:
-                return self.send_json(list_positions())
+            if method == "GET" and parts == ["topics"]:
+                return self.send_json(list_topics())
 
-            if method == "GET" and len(parts) == 2 and parts[0] == "positions":
-                pdir = position_dir(parts[1])
-                if not pdir:
-                    return self.send_json({"error": "岗位不存在"}, 404)
-                return self.send_json(load_position(pdir))
+            if method == "GET" and len(parts) == 2 and parts[0] == "topics":
+                tdir = topic_dir(parts[1])
+                if not tdir:
+                    return self.send_json({"error": "专题不存在"}, 404)
+                return self.send_json(load_topic(tdir))
 
             if len(parts) >= 2 and parts[0] == "records":
-                pid = parts[1]
-                if not position_dir(pid):
-                    return self.send_json({"error": "岗位不存在"}, 404)
+                tid = parts[1]
+                if not topic_dir(tid):
+                    return self.send_json({"error": "专题不存在"}, 404)
                 if method == "GET" and len(parts) == 2:
-                    recs, skipped = read_records(pid)
+                    recs, skipped = read_records(tid)
                     return self.send_json({"records": recs, "skipped": skipped})
                 if method == "POST" and len(parts) == 2:
                     body = self.read_body()
-                    saved = append_records(pid, body if isinstance(body, list) else [body])
+                    saved = append_records(tid, body if isinstance(body, list) else [body])
                     return self.send_json({"saved": saved})
                 if method == "POST" and parts[2:] == ["archive"]:
-                    return self.send_json({"archived": archive_records(pid)})
+                    return self.send_json({"archived": archive_records(tid)})
 
             if len(parts) == 3 and parts[0] == "notes":
-                pid, page_id = parts[1], parts[2]
-                pdir = position_dir(pid)
-                if not pdir:
-                    return self.send_json({"error": "岗位不存在"}, 404)
-                if not ID_RE.match(page_id) or page_id not in page_ids(pdir):
+                tid, page_id = parts[1], parts[2]
+                tdir = topic_dir(tid)
+                if not tdir:
+                    return self.send_json({"error": "专题不存在"}, 404)
+                if not ID_RE.match(page_id) or page_id not in page_ids(tdir):
                     return self.send_json({"error": "页面不存在"}, 404)
                 if method == "GET":
-                    return self.send_json(read_note(pid, page_id))
+                    return self.send_json(read_note(tid, page_id))
                 if method == "PUT":
                     body = self.read_body()
                     if not isinstance(body, dict) or not isinstance(body.get("content"), str):
                         return self.send_json({"error": "缺少笔记内容 content"}, 400)
                     base = body.get("base") if isinstance(body.get("base"), str) else None
-                    status, payload = write_note(pid, page_id, body["content"], base)
+                    status, payload = write_note(tid, page_id, body["content"], base)
                     return self.send_json(payload, status)
 
             return self.send_json({"error": "未知接口"}, 404)
@@ -648,13 +667,13 @@ def make_server(port: int) -> tuple[Server, int]:
 
 
 def run_check() -> int:
-    dirs = [d for d in visible_dirs(POSITIONS_DIR) if ID_RE.match(d.name)]
+    dirs = [d for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)]
     if not dirs:
-        print("data/positions/ 下还没有岗位。")
+        print(f"{TOPICS_REL}/ 下还没有专题。")
         return 0
     errors = 0
     for d in sorted(dirs):
-        p = load_position(d)
+        p = load_topic(d)
         n_points = sum(len(pg["points"]) for pg in p["pages"])
         n_q = sum(len(pg["questions"]) for pg in p["pages"])
         print(f"[{p['id']}] {p['name']}：{len(p['pages'])} 页，{n_points} 个知识点，{n_q} 道题")
@@ -668,20 +687,21 @@ def run_check() -> int:
 
 
 def run_outline() -> int:
-    """打印已有内容的结构，供人或 agent 判断新岗位与已有岗位的重叠、检查覆盖情况。"""
-    dirs = [d for d in visible_dirs(POSITIONS_DIR) if ID_RE.match(d.name)]
+    """打印已有内容的结构，供人或 agent 判断新来源与已有专题的重叠、检查覆盖情况。"""
+    dirs = [d for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)]
     if not dirs:
-        print("data/positions/ 下还没有岗位。")
+        print(f"{TOPICS_REL}/ 下还没有专题。")
         return 0
-    positions = sorted((load_position(d) for d in dirs), key=lambda p: (p["order"], p["name"]))
-    for p in positions:
+    topics = sorted((load_topic(d) for d in dirs), key=lambda p: (p["order"], p["name"]))
+    for p in topics:
         n_points = sum(len(pg["points"]) for pg in p["pages"])
         n_q = sum(len(pg["questions"]) for pg in p["pages"])
-        company = f"（{p['company']}）" if p["company"] else ""
-        print(f"[{p['id']}] {p['name']}{company}  {len(p['pages'])} 页 / {n_points} 个知识点 / {n_q} 道题  order={p['order']}")
+        tags = " · ".join(x for x in (KIND_LABEL.get(p["kind"], p["kind"]), p["origin"]) if x)
+        tags = f"（{tags}）" if tags else ""
+        print(f"[{p['id']}] {p['name']}{tags}  {len(p['pages'])} 页 / {n_points} 个知识点 / {n_q} 道题  order={p['order']}")
         if p["description"]:
             print(f"  说明：{p['description']}")
-        print(f"  JD：{p['path']}/jd.md" if p["jd"] else "  JD：无")
+        print(f"  来源：{p['path']}/{p['sourceFile']}" if p["source"] else "  来源：无")
         for pg in p["pages"]:
             counts: dict[str, int] = {}
             for q in pg["questions"]:
@@ -697,11 +717,11 @@ def run_outline() -> int:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="面试准备本地服务")
+    ap = argparse.ArgumentParser(description="Drillbook 本地服务")
     ap.add_argument("--port", type=int, default=8765, help="端口，默认 8765")
     ap.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     ap.add_argument("--check", action="store_true", help="只检查题库格式")
-    ap.add_argument("--outline", action="store_true", help="列出所有岗位、页面和知识点")
+    ap.add_argument("--outline", action="store_true", help="列出所有专题、页面和知识点")
     args = ap.parse_args()
 
     if args.check:
@@ -709,12 +729,12 @@ def main() -> None:
     if args.outline:
         sys.exit(run_outline())
 
-    POSITIONS_DIR.mkdir(parents=True, exist_ok=True)
+    TOPICS_DIR.mkdir(parents=True, exist_ok=True)
     RECORDS_DIR.mkdir(parents=True, exist_ok=True)
     httpd, port = make_server(args.port)
     url = f"http://127.0.0.1:{port}/"
-    print(f"面试准备已启动：{url}")
-    print(f"题库目录：{POSITIONS_DIR}")
+    print(f"Drillbook 已启动：{url}")
+    print(f"题库目录：{TOPICS_DIR}")
     print(f"作答记录：{RECORDS_DIR}")
     print("关闭此窗口或按 Ctrl+C 停止服务。")
     if not args.no_browser:

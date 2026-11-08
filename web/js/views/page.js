@@ -6,9 +6,9 @@ import * as store from '../store.js';
 import { STATE_LABEL, aggregateState } from '../rank.js';
 import { getSession, newSession, mountQuiz } from './quiz.js';
 
-export function renderPage(main, pos, pageId, tab, params, shell) {
-  const page = pos.pageById.get(pageId);
-  const base = `#/p/${encodeURIComponent(pos.id)}`;
+export function renderPage(main, topic, pageId, tab, params, shell) {
+  const page = topic.pageById.get(pageId);
+  const base = `#/p/${encodeURIComponent(topic.id)}`;
   if (!page) {
     main.append(
       h('div', { class: 'empty' }, h('h2', null, '找不到这个页面'), h('a', { class: 'btn', href: base }, '返回总览')),
@@ -70,7 +70,7 @@ export function renderPage(main, pos, pageId, tab, params, shell) {
   const body = h('div', { class: 'pg-body' });
   main.append(h('div', { class: 'page' }, head, body));
 
-  const view = tab === 'quiz' ? quizTab(body, pos, page, pageHref) : learnTab(body, pos, page, pageHref, params.get('kp'));
+  const view = tab === 'quiz' ? quizTab(body, topic, page, pageHref) : learnTab(body, topic, page, pageHref, params.get('kp'));
   return {
     destroy() {
       view.destroy?.();
@@ -79,7 +79,7 @@ export function renderPage(main, pos, pageId, tab, params, shell) {
   };
 }
 
-function learnTab(body, pos, page, pageHref, focusPoint) {
+function learnTab(body, topic, page, pageHref, focusPoint) {
   const byPoint = new Map(page.points.map((p) => [p.id, []]));
   for (const q of page.questions) for (const pid of q.points) byPoint.get(pid)?.push(q);
 
@@ -121,7 +121,7 @@ function learnTab(body, pos, page, pageHref, focusPoint) {
   );
 
   function paintStates() {
-    const s = store.stats(pos);
+    const s = store.stats(topic);
     for (const pt of page.points) {
       const qs = byPoint.get(pt.id) || [];
       cellBoxes.get(pt.id).replaceChildren(
@@ -183,7 +183,7 @@ function learnTab(body, pos, page, pageHref, focusPoint) {
     });
   }
 
-  const off = store.on('records', (p) => p === pos && paintStates());
+  const off = store.on('records', (p) => p === topic && paintStates());
   return {
     destroy() {
       off();
@@ -194,19 +194,19 @@ function learnTab(body, pos, page, pageHref, focusPoint) {
   };
 }
 
-function quizTab(body, pos, page, pageHref) {
+function quizTab(body, topic, page, pageHref) {
   if (!page.questions.length) {
     body.append(h('p', { class: 'muted' }, `本页还没有题目。在 ${page.dir}/questions.json 中添加。`));
     return {};
   }
-  const key = `${pos.id}:page:${page.id}`;
+  const key = `${topic.id}:page:${page.id}`;
   let session = getSession(key);
   const sig = page.questions.map((q) => q.gid).join('|');
   if (!session || session.sig !== sig) {
     session = newSession(key, page.questions, { mode: 'page' });
     session.sig = sig;
   }
-  return mountQuiz(body, pos, session, {
+  return mountQuiz(body, topic, session, {
     restartAll: () => {
       const s = newSession(key, page.questions, { mode: 'page' });
       s.sig = sig;

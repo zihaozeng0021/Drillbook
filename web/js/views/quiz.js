@@ -49,7 +49,7 @@ function makePerm(q) {
 
 const enc = encodeURIComponent;
 
-export function mountQuiz(container, pos, initial, opts = {}) {
+export function mountQuiz(container, topic, initial, opts = {}) {
   let session = initial;
   let fresh = false;
   let shownAt = performance.now();
@@ -156,7 +156,7 @@ export function mountQuiz(container, pos, initial, opts = {}) {
     const q = cur();
     const a = ansOf(q);
     const perm = session.perms.get(q.gid);
-    const page = pos.pageById.get(q.pageId);
+    const page = topic.pageById.get(q.pageId);
     const multi = q.type === 'multi';
     const submitted = !!a?.submitted;
 
@@ -187,7 +187,7 @@ export function mountQuiz(container, pos, initial, opts = {}) {
         { class: 'q-meta' },
         h('span', { class: `q-type ${q.type}` }, multi ? '多选' : '单选'),
         session.mode !== 'page'
-          ? h('a', { class: 'q-page', href: `#/p/${enc(pos.id)}/page/${enc(page.id)}` }, h('span', { class: 'num' }, page.no), page.title)
+          ? h('a', { class: 'q-page', href: `#/p/${enc(topic.id)}/page/${enc(page.id)}` }, h('span', { class: 'num' }, page.no), page.title)
           : null,
       ),
       h('div', { class: 'q-stem md', html: md(q.stem) }),
@@ -212,8 +212,8 @@ export function mountQuiz(container, pos, initial, opts = {}) {
   }
 
   function feedback(q, a) {
-    const st = store.stats(pos).get(q.gid);
-    const attempts = store.attemptsOf(pos, q.gid);
+    const st = store.stats(topic).get(q.gid);
+    const attempts = store.attemptsOf(topic, q.gid);
     return h(
       'section',
       { class: `feedback ${a.ok ? 'ok' : 'bad'}`, 'aria-live': 'polite' },
@@ -238,7 +238,7 @@ export function mountQuiz(container, pos, initial, opts = {}) {
   }
 
   function pointPeek(pageId, pointId) {
-    const pt = pos.pointByKey.get(`${pageId}/${pointId}`);
+    const pt = topic.pointByKey.get(`${pageId}/${pointId}`);
     if (!pt) return null;
     return h(
       'details',
@@ -248,7 +248,7 @@ export function mountQuiz(container, pos, initial, opts = {}) {
         'div',
         { class: 'kp-peek-body' },
         h('div', { class: 'md', html: md(pt.content) }),
-        h('a', { class: 'link', href: `#/p/${enc(pos.id)}/page/${enc(pageId)}?kp=${enc(pointId)}` }, '在知识点页查看'),
+        h('a', { class: 'link', href: `#/p/${enc(topic.id)}/page/${enc(pageId)}?kp=${enc(pointId)}` }, '在知识点页查看'),
       ),
     );
   }
@@ -364,7 +364,7 @@ export function mountQuiz(container, pos, initial, opts = {}) {
     a.pick = a.unknown ? '' : [...a.picked].map((i) => LETTERS[i]).sort().join('');
     a.ok = !a.unknown && a.pick === q.answer;
     a.submitted = true;
-    store.record(pos, q, { ok: a.ok, pick: a.pick, unknown: !!a.unknown, src: session.mode, dur: performance.now() - shownAt });
+    store.record(topic, q, { ok: a.ok, pick: a.pick, unknown: !!a.unknown, src: session.mode, dur: performance.now() - shownAt });
     fresh = true;
     render();
   }

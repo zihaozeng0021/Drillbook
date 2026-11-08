@@ -60,6 +60,19 @@ export function kbd(text) {
   return h('span', { class: 'kbd' }, text);
 }
 
+// 专题类型（topic.json 的 kind）：已知类型显示中文，其他原样显示
+export const KIND_LABEL = { job: '岗位', book: '书', course: '课程', exam: '考试' };
+
+export function kindLabel(kind) {
+  const k = String(kind || '').trim();
+  return k ? KIND_LABEL[k] || k : '';
+}
+
+export function kindTag(kind) {
+  const label = kindLabel(kind);
+  return label ? h('span', { class: 'kind-tag' }, label) : null;
+}
+
 // 题目方格：每道题一个，颜色代表状态
 export function cell(state, tip, extra = {}) {
   return h('span', { class: `cell s-${state}`, 'data-tip': tip || null, ...extra });

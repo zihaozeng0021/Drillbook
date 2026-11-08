@@ -32,11 +32,11 @@ async function request(method, url, body, { keepalive = false } = {}) {
 const enc = encodeURIComponent;
 
 export const api = {
-  positions: () => request('GET', '/api/positions'),
-  position: (pid) => request('GET', `/api/positions/${enc(pid)}`),
-  records: (pid) => request('GET', `/api/records/${enc(pid)}`),
-  saveRecords: (pid, records) => request('POST', `/api/records/${enc(pid)}`, records),
-  archiveRecords: (pid) => request('POST', `/api/records/${enc(pid)}/archive`),
-  note: (pid, pageId) => request('GET', `/api/notes/${enc(pid)}/${enc(pageId)}`),
-  saveNote: (pid, pageId, body, opts) => request('PUT', `/api/notes/${enc(pid)}/${enc(pageId)}`, body, opts),
+  topics: () => request('GET', '/api/topics'),
+  topic: (tid) => request('GET', `/api/topics/${enc(tid)}`),
+  records: (tid) => request('GET', `/api/records/${enc(tid)}`),
+  saveRecords: (tid, records) => request('POST', `/api/records/${enc(tid)}`, records),
+  archiveRecords: (tid) => request('POST', `/api/records/${enc(tid)}/archive`),
+  note: (tid, pageId) => request('GET', `/api/notes/${enc(tid)}/${enc(pageId)}`),
+  saveNote: (tid, pageId, body, opts) => request('PUT', `/api/notes/${enc(tid)}/${enc(pageId)}`, body, opts),
 };

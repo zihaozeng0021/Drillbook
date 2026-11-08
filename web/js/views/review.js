@@ -17,9 +17,9 @@ const FORMULA = `$$P=\\frac{E+${RANK.K * RANK.P0}}{E+C+${RANK.K}}\\qquad w=0.5^{
 - 当天答错后马上答对，仍然算薄弱；隔一天以上再答对，才会降到 ${RANK.P0 * 100} 以下
 - 一直答对的题排在最后；长期不练，所有题都会慢慢回到 ${RANK.P0 * 100}`;
 
-export function renderReview(main, pos, params) {
-  const key = `${pos.id}:review`;
-  const base = `#/p/${enc(pos.id)}`;
+export function renderReview(main, topic, params) {
+  const key = `${topic.id}:review`;
+  const base = `#/p/${enc(topic.id)}`;
   const root = h('div', { class: 'review' });
   main.append(root);
 
@@ -51,7 +51,7 @@ export function renderReview(main, pos, params) {
       ),
       holder,
     );
-    quiz = mountQuiz(holder, pos, s, { exit: { label: '返回列表', onClick: endSession }, onSingleDone: endSession });
+    quiz = mountQuiz(holder, topic, s, { exit: { label: '返回列表', onClick: endSession }, onSingleDone: endSession });
     window.scrollTo(0, 0);
   }
 
@@ -62,8 +62,8 @@ export function renderReview(main, pos, params) {
   }
 
   function listView() {
-    const s = store.stats(pos);
-    const all = store.ranked(pos);
+    const s = store.stats(topic);
+    const all = store.ranked(topic);
     const scoped = pageFilter === 'all' ? all : all.filter((q) => q.pageId === pageFilter);
     const counts = { all: scoped.length, weak: 0, new: 0, fair: 0, good: 0 };
     for (const q of scoped) counts[s.get(q.gid).state]++;
@@ -144,7 +144,7 @@ export function renderReview(main, pos, params) {
         },
       },
       h('option', { value: 'all' }, '全部页面'),
-      pos.pages.map((p) => h('option', { value: p.id, selected: pageFilter === p.id }, `${p.no}  ${p.title}`)),
+      topic.pages.map((p) => h('option', { value: p.id, selected: pageFilter === p.id }, `${p.no}  ${p.title}`)),
     );
 
     const sizeCtl = h(
@@ -190,7 +190,7 @@ export function renderReview(main, pos, params) {
 
     const rows = visible.map((q, i) => {
       const st = s.get(q.gid);
-      const page = pos.pageById.get(q.pageId);
+      const page = topic.pageById.get(q.pageId);
       return h(
         'button',
         { class: 'rrow', type: 'button', onclick: () => startSession([q], true), 'aria-label': `单独练习：${plainText(q.stem, 40)}` },
@@ -198,7 +198,7 @@ export function renderReview(main, pos, params) {
         meter(st),
         h('span', { class: 'stem' }, plainText(q.stem, 140)),
         h('span', { class: 'pg' }, h('span', { class: 'num' }, page.no), page.title),
-        st.n ? historyMarks(store.attemptsOf(pos, q.gid), 8) : h('span', { class: 'hist-empty' }, '—'),
+        st.n ? historyMarks(store.attemptsOf(topic, q.gid), 8) : h('span', { class: 'hist-empty' }, '—'),
         h('span', { class: 'when' }, st.last ? relTime(st.last.t) : ''),
       );
     });
@@ -225,9 +225,9 @@ export function renderReview(main, pos, params) {
   }
 
   const single = params.get('q');
-  if (single && pos.qById.has(single)) {
+  if (single && topic.qById.has(single)) {
     history.replaceState(null, '', `${base}/review`);
-    startSession([pos.qById.get(single)], true);
+    startSession([topic.qById.get(single)], true);
   } else {
     const existing = getSession(key);
     if (existing) showSession(existing);

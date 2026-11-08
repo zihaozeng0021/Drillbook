@@ -1,9 +1,9 @@
-// 页面笔记：每个页面一个 Markdown 文件 data/notes/<岗位>/<页面>.md
+// 页面笔记：每个页面一个 Markdown 文件 data/notes/<专题>/<页面>.md
 //
 // · 右侧面板里编辑，停止输入 0.8 秒后自动保存，Ctrl+S 立即保存
 // · 文件也可以直接用编辑器改：网页里没有未保存内容时，回到页面会自动载入新内容；
 //   两边同时改了会提示冲突，由你选择保留哪一份（服务端用内容指纹判断）
-// · 服务端覆盖前会把旧版本留在 data/notes/<岗位>/_history/<页面>/
+// · 服务端覆盖前会把旧版本留在 data/notes/<专题>/_history/<页面>/
 
 import { h, icon, prefs } from '../ui.js';
 import { mdFresh } from '../md.js';
@@ -11,21 +11,21 @@ import { api } from '../api.js';
 
 const SAVE_DELAY = 800;
 const KEEPALIVE_LIMIT = 60000; // 关页面时用 keepalive 请求补存，浏览器对请求体有约 64KB 限制
-const docs = new Map(); // 「岗位/页面」-> NoteDoc，切换页面、标签后状态还在
+const docs = new Map(); // 「专题/页面」-> NoteDoc，切换页面、标签后状态还在
 
-function docFor(pid, page) {
-  const key = `${pid}/${page.id}`;
+function docFor(tid, page) {
+  const key = `${tid}/${page.id}`;
   let doc = docs.get(key);
-  if (!doc) docs.set(key, (doc = new NoteDoc(pid, page)));
+  if (!doc) docs.set(key, (doc = new NoteDoc(tid, page)));
   doc.page = page;
   return doc;
 }
 
 class NoteDoc {
-  constructor(pid, page) {
-    this.pid = pid;
+  constructor(tid, page) {
+    this.tid = tid;
     this.page = page;
-    this.path = `data/notes/${pid}/${page.id}.md`;
+    this.path = `data/notes/${tid}/${page.id}.md`;
     this.content = '';
     this.base = null; // 上次与文件同步时的内容指纹
     this.loaded = false;
@@ -58,7 +58,7 @@ class NoteDoc {
     if (this.busy) return Promise.resolve();
     if (this.loading) return this.loading;
     this.loading = api
-      .note(this.pid, this.page.id)
+      .note(this.tid, this.page.id)
       .then((r) => {
         if (this.busy) return;
         const changed = !this.loaded || r.hash !== this.base;
@@ -103,7 +103,7 @@ class NoteDoc {
     this.emit('status');
     const content = this.content;
     try {
-      const r = await api.saveNote(this.pid, this.page.id, { content, base: this.base }, { keepalive });
+      const r = await api.saveNote(this.tid, this.page.id, { content, base: this.base }, { keepalive });
       this.base = r.hash;
       this.page.noteSize = r.size;
       this.error = '';
@@ -239,9 +239,9 @@ function indent(ta, outdent) {
 // ── 面板 ──
 
 export class NotesPanel {
-  constructor(host, pos) {
+  constructor(host, topic) {
     this.host = host;
-    this.pos = pos;
+    this.topic = topic;
     this.page = null;
     this.doc = null;
     this.offDoc = null;
@@ -316,7 +316,7 @@ export class NotesPanel {
     }
     this.page = page;
     if (page && !this.doc) {
-      this.doc = docFor(this.pos.id, page);
+      this.doc = docFor(this.topic.id, page);
       this.offDoc = this.doc.on((reason) => this.sync(reason));
       this.rendered = null;
       this.ta.value = this.doc.content;

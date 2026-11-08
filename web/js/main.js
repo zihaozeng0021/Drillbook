@@ -1,9 +1,9 @@
 // 入口与路由
-//   #/                          岗位列表
-//   #/p/<岗位>                  岗位总览
-//   #/p/<岗位>/page/<页面>      知识点（?kp=<知识点> 定位到该知识点）
-//   #/p/<岗位>/page/<页面>/quiz 本页练习
-//   #/p/<岗位>/review           错题复习
+//   #/                          专题列表
+//   #/p/<专题>                  专题总览（p 是固定前缀，内容里的站内链接依赖它）
+//   #/p/<专题>/page/<页面>      知识点（?kp=<知识点> 定位到该知识点）
+//   #/p/<专题>/page/<页面>/quiz 本页练习
+//   #/p/<专题>/review           错题复习
 
 import { h, icon, initTooltip, hideTip } from './ui.js';
 import * as store from './store.js';
@@ -45,15 +45,15 @@ async function route() {
       return;
     }
 
-    const pid = seg[1];
-    if (!shell || shell.pid !== pid) {
+    const tid = seg[1];
+    if (!shell || shell.tid !== tid) {
       shell?.destroy();
       shell = null;
       app.replaceChildren(h('div', { class: 'boot' }));
     }
-    const pos = await store.getPosition(pid);
+    const topic = await store.getTopic(tid);
     if (token !== routeToken) return;
-    if (!shell) shell = new Shell(app, pos);
+    if (!shell) shell = new Shell(app, topic);
 
     let name = 'overview';
     let pageId = null;
@@ -71,9 +71,9 @@ async function route() {
     main.replaceChildren();
     if (!params.get('kp')) window.scrollTo(0, 0);
 
-    if (name === 'overview') view = renderOverview(main, pos);
-    else if (name === 'page') view = renderPage(main, pos, pageId, tab, params, shell);
-    else view = renderReview(main, pos, params);
+    if (name === 'overview') view = renderOverview(main, topic);
+    else if (name === 'page') view = renderPage(main, topic, pageId, tab, params, shell);
+    else view = renderReview(main, topic, params);
   } catch (err) {
     if (token !== routeToken) return;
     console.error(err);
@@ -98,9 +98,9 @@ function errorScreen(err) {
     return h(
       'div',
       { class: 'fullscreen-msg' },
-      h('h1', null, '找不到这个岗位'),
+      h('h1', null, '找不到这个专题'),
       h('p', null, '它可能被重命名或删除了。'),
-      h('a', { class: 'btn primary', href: '#/' }, '返回岗位列表'),
+      h('a', { class: 'btn primary', href: '#/' }, '返回专题列表'),
     );
   }
   return h(
