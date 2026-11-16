@@ -25,7 +25,18 @@ Content is organised into **topics**. A topic is one learning track built from o
 
 An Android app that runs the same site offline on your phone and syncs with this computer over Wi-Fi, without any account. Practise anywhere; when the phone can reach the computer, both sides end up with the same topics, answers and notes.
 
-1. Build the app: `python android/build.py`. It needs JDK 11 or later and the Android SDK packages `platforms;android-35` and `build-tools;35.0.1` (or later), and writes `android/build/drillbook.apk`. Rebuild after changing `web/`; new topics, answers and notes don't need a rebuild.
+1. **Build the app (once).** The repository doesn't include the APK, so the download link in step 2 only works after you build it. No account is needed.
+   1. Install JDK 17 or later, for example [Eclipse Temurin](https://adoptium.net/).
+   2. From [developer.android.com/studio](https://developer.android.com/studio), download "Command line tools only" and unzip it so that its `bin` folder ends up at `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin` (macOS: `~/Library/Android/sdk/cmdline-tools/latest/bin`, Linux: `~/Android/Sdk/cmdline-tools/latest/bin`; to use another folder, set `ANDROID_HOME` to it).
+   3. Install the two packages the build needs, typing `y` when asked to accept the licence:
+
+      ```text
+      %LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin\sdkmanager "platforms;android-35" "build-tools;35.0.1"
+      ```
+
+   4. In this folder, run `python android/build.py`. It creates `android/build/drillbook.apk`.
+
+   Run step 4 again after updating the code. New topics, answers and notes don't need a rebuild.
 2. On the computer, click 连接手机 at the top right of the topic list and turn on 允许手机连接. The dialog shows this computer's address, a 6-digit pairing code and the app's download link.
 3. On the phone, open the download link in the browser and install the APK, allowing the browser to install apps when asked.
 4. Open Drillbook on the phone, enter the address and the pairing code, and tap 连接并同步.
@@ -122,7 +133,18 @@ python server.py --port 9000  Use a different port
 
 一个安卓 App，在手机上离线运行同一个网站，并通过 Wi-Fi 和这台电脑双向同步（不需要任何账号）。在哪儿都能做题；手机连得上电脑时，两边的专题、作答记录和笔记就会一致。
 
-1. 打包 App：运行 `python android/build.py`。需要 JDK 11 或更高版本，以及 Android SDK 的 `platforms;android-35` 和 `build-tools;35.0.1`（或更高）；输出 `android/build/drillbook.apk`。改了 `web/` 之后要重新打包；新增专题、作答记录和笔记不用。
+1. **先打包 App（只需一次）**。仓库里不带 APK，打包之后第 2 步的下载地址才能用。全程不需要账号。
+   1. 安装 JDK 17 或更高版本，例如 [Eclipse Temurin](https://adoptium.net/)。
+   2. 在 [developer.android.com/studio](https://developer.android.com/studio) 下载「Command line tools only」，解压后让其中的 `bin` 文件夹位于 `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin`（macOS：`~/Library/Android/sdk/cmdline-tools/latest/bin`，Linux：`~/Android/Sdk/cmdline-tools/latest/bin`；放在别处就把环境变量 `ANDROID_HOME` 设成那个文件夹）。
+   3. 安装打包需要的两个组件，提示接受许可协议时输入 `y`：
+
+      ```text
+      %LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin\sdkmanager "platforms;android-35" "build-tools;35.0.1"
+      ```
+
+   4. 在项目文件夹里运行 `python android/build.py`，生成 `android/build/drillbook.apk`。
+
+   更新代码后重新运行第 4 步；新增专题、作答记录和笔记不用重新打包。
 2. 在电脑上点专题列表右上角的「连接手机」，打开「允许手机连接」。对话框里会显示这台电脑的地址、6 位配对码和 App 的下载地址。
 3. 用手机浏览器打开下载地址，安装 APK；按提示允许浏览器安装应用。
 4. 在手机上打开 Drillbook，填电脑地址和配对码，点「连接并同步」。
