@@ -2970,8 +2970,24 @@ button.rrow:hover {
   min-width: 0;
 }
 
-.phone-bar-msg:empty {
+.phone-bar-info > span:empty,
+.phone-bar-notes:empty {
   display: none;
+}
+
+.phone-bar-notes p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--text-2);
+}
+
+.phone-bar-notes .ico {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
 }
 
 .phone-bar-acts {

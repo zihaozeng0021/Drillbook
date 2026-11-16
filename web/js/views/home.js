@@ -1,11 +1,12 @@
-// 专题列表（安卓 App 里另有「连接电脑」：第一次使用时配对下载，之后可以从电脑更新）
+// 专题列表（安卓 App 里另有「连接电脑」：第一次使用时配对，之后和电脑自动同步）
 
 import { h, icon, logo, cell, plainText, kindTag, relTime, toast } from '../ui.js';
 import * as store from '../store.js';
 import { STATE_LABEL } from '../rank.js';
 import { APP } from '../native.js';
-import { kvGet, localChanges } from '../local.js';
-import { getLink, pair, pull, normalizeAddress } from '../phone.js';
+import { localChanges } from '../local.js';
+import { getLink, pair, normalizeAddress } from '../phone.js';
+import { status as syncStatus, onStatus, syncNow } from '../autosync.js';
 import { openPhoneDialog } from './phonelink.js';
 
 export async function renderHome(app) {
@@ -18,20 +19,22 @@ export async function renderHome(app) {
           'div',
           { class: 'home' },
           h('header', { class: 'home-head' }, logo(), h('h1', null, 'Drillbook')),
-          connectForm(link, () => rerender(app)),
+          connectForm(link, rerender),
         ),
       );
       return {};
     }
-    return renderList(app, topics, await phoneBar(app, link));
+    const bar = phoneBar(link);
+    renderList(app, topics, bar.el);
+    return { destroy: bar.destroy };
   }
   return renderList(app, await store.getTopics(true), null);
 }
 
-// 下载完成时用户可能已经点进了某个专题：只在还停在专题列表时重画，免得盖掉正在看的页面
-function rerender(app) {
+// 只在还停在专题列表时重画（同步完成时用户可能已经点进了某个专题）；经由路由重画，旧页面会被正确收尾
+function rerender() {
   const seg = location.hash.replace(/^#/, '').split('?')[0].split('/').filter(Boolean);
-  if (seg[0] !== 'p' || !seg[1]) renderHome(app);
+  if (seg[0] !== 'p' || !seg[1]) window.dispatchEvent(new HashChangeEvent('hashchange'));
 }
 
 function renderList(app, topics, bar) {
@@ -125,57 +128,80 @@ function readout(value, label, tone = '') {
   return h('span', { class: `readout ${tone}` }, h('b', { class: 'num' }, value), h('span', null, label));
 }
 
-// ── 安卓 App：数据来自电脑 ──
+// ── 安卓 App：和电脑同步 ──
 
-async function phoneBar(app, link) {
-  const [pulledAt, changes] = await Promise.all([kvGet('pulledAt'), localChanges()]);
+function phoneBar(link) {
   const where = link.computer ? `${link.computer}（${link.addresses[0]}）` : link.addresses[0];
-  const pending = [changes.records ? `新做了 ${changes.records} 次题` : '', changes.notes ? `改了 ${changes.notes} 份笔记` : '']
-    .filter(Boolean)
-    .join('、');
-  const msg = h('span', { class: 'phone-bar-msg', role: 'status' });
-  const btn = h('button', { class: 'btn sm primary', type: 'button', onclick: update }, icon('retry'), '从电脑更新');
+  const title = h('b');
+  const sub = h('span', { class: 'muted small' });
+  const pending = h('span', { class: 'muted small' });
+  const notes = h('div', { class: 'phone-bar-notes' });
+  const btn = h('button', { class: 'btn sm primary', type: 'button', onclick: manual }, icon('retry'), '立即同步');
   const repair = h('button', { class: 'btn sm ghost', type: 'button', onclick: showForm }, '重新配对');
-  const bar = h(
+  const el = h(
     'section',
-    { class: 'phone-bar' },
-    h(
-      'div',
-      { class: 'phone-bar-info' },
-      h('b', null, `电脑上的数据 · ${pulledAt ? `${relTime(pulledAt)}更新` : '还没有下载'}`),
-      h('span', { class: 'muted small' }, where),
-      pending ? h('span', { class: 'muted small' }, `手机上${pending}，下一步做好同步后会合并回电脑`) : null,
-      msg,
-    ),
+    { class: 'phone-bar', role: 'status' },
+    h('div', { class: 'phone-bar-info' }, title, sub, pending, notes),
     h('div', { class: 'phone-bar-acts' }, btn, repair),
   );
+  let prev = syncStatus.state;
 
-  async function update() {
-    btn.disabled = repair.disabled = true;
+  async function paint(s) {
+    title.textContent =
+      s.state === 'syncing' ? '正在同步…' : s.state === 'error' ? '没连上电脑' : s.at ? `已同步 · ${relTime(s.at)}` : '还没有同步';
+    sub.textContent = s.state === 'error' ? `${s.error}${s.at ? `（上次同步：${relTime(s.at)}）` : ''}` : where;
+    btn.disabled = s.state === 'syncing';
+    const c = await localChanges();
+    const parts = [c.records ? `${c.records} 次作答` : '', c.notes ? `${c.notes} 份笔记` : ''].filter(Boolean);
+    pending.textContent = parts.length ? `还有 ${parts.join('、')}没同步到电脑` : '';
+    notes.replaceChildren(...(await conflictLines(s.report)));
+  }
+
+  const off = onStatus((s) => {
+    if (!el.isConnected) return off();
+    const done = prev === 'syncing' && s.state === 'ok';
+    prev = s.state;
+    if (done) rerender(); // 同步完：整页重画，各专题的统计跟着更新
+    else paint(s);
+  });
+  paint(syncStatus);
+
+  async function manual() {
     try {
-      await pull((text) => {
-        msg.textContent = text;
-      });
-      store.invalidateAll();
-      toast('已从电脑更新', 'ok');
-      rerender(app);
+      if (await syncNow()) toast('已同步', 'ok');
     } catch (e) {
-      msg.textContent = '';
-      btn.disabled = repair.disabled = false;
       toast(e.message, 'bad', 5000);
-      if (e.unpaired && bar.isConnected) showForm();
+      if (e.unpaired && el.isConnected) showForm();
     }
   }
 
   function showForm() {
-    bar.replaceWith(connectForm(link, () => rerender(app), () => rerender(app)));
+    el.replaceWith(connectForm(link, rerender, rerender));
   }
 
-  return bar;
+  return { el, destroy: off };
 }
 
-// 连接电脑：填电脑地址和配对码，配对后下载全部数据。
-// 已经配对过（比如上次配对成功、下载却失败了）时，可以直接用原来的配对重新下载，不用新配对码
+// 最近一次同步里两边都改过的笔记：保留了哪一份，另一份存在哪里
+async function conflictLines(report) {
+  const out = [];
+  for (const c of report?.conflicts || []) {
+    let page = c.pageId;
+    try {
+      page = (await store.getTopic(c.tid)).pageById.get(c.pageId)?.title || page;
+    } catch {
+      /* 专题已经不在了 */
+    }
+    const kept = c.kept === 'phone' ? '手机' : '电脑';
+    out.push(
+      h('p', { class: 'small' }, icon('warn'), ` 笔记「${page}」两边都改过：保留了${kept}上的版本${c.saved ? `，另一份存在电脑的 ${c.saved}` : ''}`),
+    );
+  }
+  return out;
+}
+
+// 连接电脑：填电脑地址和配对码，配对后同步（第一次就是下载全部数据）。
+// 已经配对过（比如上次配对成功、同步却失败了）时，可以直接用原来的配对再同步，不用新配对码
 function connectForm(link, onDone, onCancel) {
   const addr = h('input', {
     type: 'text',
@@ -188,8 +214,8 @@ function connectForm(link, onDone, onCancel) {
   });
   const code = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', placeholder: '6 位数字' });
   const msg = h('p', { class: 'phone-msg', role: 'status' });
-  const go = h('button', { class: 'btn primary', type: 'submit' }, '连接并下载数据');
-  const again = link ? h('button', { class: 'btn ghost', type: 'button', onclick: () => run(false) }, '用原来的配对重新下载') : null;
+  const go = h('button', { class: 'btn primary', type: 'submit' }, '连接并同步');
+  const again = link ? h('button', { class: 'btn ghost', type: 'button', onclick: () => run(false) }, '用原来的配对再同步') : null;
 
   async function run(withCode) {
     go.disabled = true;
@@ -200,11 +226,10 @@ function connectForm(link, onDone, onCancel) {
         msg.textContent = `正在连接 ${normalizeAddress(addr.value)}…`;
         await pair(addr.value, code.value);
       }
-      await pull((text) => {
-        msg.textContent = text;
-      });
+      msg.textContent = '正在同步…';
+      await syncNow();
       store.invalidateAll();
-      toast(withCode ? '已连接电脑，数据已下载' : '数据已下载', 'ok');
+      toast(withCode ? '已连接电脑，数据已同步' : '已同步', 'ok');
       onDone();
     } catch (err) {
       go.disabled = false;

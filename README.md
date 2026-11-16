@@ -23,14 +23,21 @@ Content is organised into **topics**. A topic is one learning track built from o
 
 ### Phone app (Android)
 
-An Android app that runs the same site offline on your phone. It pairs with this computer over Wi-Fi, without any account, and downloads your topics, answers and notes. For now, answers and notes made on the phone stay on the phone; merging them back into the computer is the next step.
+An Android app that runs the same site offline on your phone and syncs with this computer over Wi-Fi, without any account. Practise anywhere; when the phone can reach the computer, both sides end up with the same topics, answers and notes.
 
 1. Build the app: `python android/build.py`. It needs JDK 11 or later and the Android SDK packages `platforms;android-35` and `build-tools;35.0.1` (or later), and writes `android/build/drillbook.apk`. Rebuild after changing `web/`; new topics, answers and notes don't need a rebuild.
 2. On the computer, click 连接手机 at the top right of the topic list and turn on 允许手机连接. The dialog shows this computer's address, a 6-digit pairing code and the app's download link.
 3. On the phone, open the download link in the browser and install the APK, allowing the browser to install apps when asked.
-4. Open Drillbook on the phone, enter the address and the pairing code, and tap 连接并下载数据. Later, tap 从电脑更新 to get new content.
+4. Open Drillbook on the phone, enter the address and the pairing code, and tap 连接并同步.
 
-The phone and the computer must be on the same Wi-Fi. School and café networks often block devices from reaching each other; connect the computer to the phone's hotspot instead. Pairing details and the app's signing key are kept in `.local/`, which is not committed. Back up `.local/android-signing.*`: an app signed with a different key can't be installed over the old one, so you would have to uninstall it and lose anything not yet merged back.
+The app syncs by itself when you open it, when you come back to it and before you leave it, and every few minutes while there are unsynced changes; 立即同步 syncs on demand. If it can't reach the computer it keeps your changes and tries again later. How the two sides are merged:
+
+- **Answers** from both sides are combined; nothing is overwritten.
+- **Notes**: if only one side changed a note, that version is used. If both changed it, the more recent edit wins and the other version is saved in the computer's `data/notes/<topic>/_history/<page>/` (file name ending in `-phone` or `-pc`); the app tells you when this happens.
+- **Resetting a topic's answers** on either side resets it on both after the next sync. The computer moves its old answers to `data/records/archive/`.
+- **Knowledge pages** are edited on the computer only; the app shows them read-only.
+
+The phone and the computer must be on the same Wi-Fi. School and café networks often block devices from reaching each other; connect the computer to the phone's hotspot instead. After pairing, the phone signs each sync request instead of sending its token, so a request captured on the Wi-Fi can't be replayed. Pairing details and the app's signing key are kept in `.local/`, which is not committed. Back up `.local/android-signing.*`: an app signed with a different key can't be installed over the old one, so you would have to uninstall it and lose anything not yet synced.
 
 ### Add a topic with an AI agent
 
@@ -62,7 +69,7 @@ The phone and the computer must be on the same Wi-Fi. School and café networks 
 | Folder | Contents |
 | --- | --- |
 | `data/topics/` | Topics, pages, knowledge points and questions (format described in `AGENTS.md`) |
-| `data/records/` | Your answers, one line per answer |
+| `data/records/` | Your answers, one line per answer; `resets.json` notes when each topic's answers were last reset |
 | `data/notes/` | Your notes, one `.md` file per page; older versions in `_history/` |
 
 To back up, copy `data/`. The 重置作答记录 (reset answers) link at the bottom of a topic's overview moves old records to `data/records/archive/` instead of deleting them.
@@ -113,14 +120,21 @@ python server.py --port 9000  Use a different port
 
 ### 手机版（安卓）
 
-一个安卓 App，在手机上离线运行同一个网站。它通过 Wi-Fi 和这台电脑配对（不需要任何账号），下载专题、作答记录和笔记。目前手机上做的题和写的笔记先留在手机上，合并回电脑是下一步要做的。
+一个安卓 App，在手机上离线运行同一个网站，并通过 Wi-Fi 和这台电脑双向同步（不需要任何账号）。在哪儿都能做题；手机连得上电脑时，两边的专题、作答记录和笔记就会一致。
 
 1. 打包 App：运行 `python android/build.py`。需要 JDK 11 或更高版本，以及 Android SDK 的 `platforms;android-35` 和 `build-tools;35.0.1`（或更高）；输出 `android/build/drillbook.apk`。改了 `web/` 之后要重新打包；新增专题、作答记录和笔记不用。
 2. 在电脑上点专题列表右上角的「连接手机」，打开「允许手机连接」。对话框里会显示这台电脑的地址、6 位配对码和 App 的下载地址。
 3. 用手机浏览器打开下载地址，安装 APK；按提示允许浏览器安装应用。
-4. 在手机上打开 Drillbook，填电脑地址和配对码，点「连接并下载数据」。之后点「从电脑更新」获取新内容。
+4. 在手机上打开 Drillbook，填电脑地址和配对码，点「连接并同步」。
 
-手机和电脑要连同一个 Wi-Fi。学校、咖啡店的网络一般不允许设备之间互连，这时让电脑连手机热点。配对信息和 App 的签名密钥保存在 `.local/`，不进 git。请备份 `.local/android-signing.*`：换了密钥签名的 App 不能覆盖安装旧版，只能卸载重装，手机上还没合并回电脑的内容会丢失。
+App 会在打开时、回到 App 时、离开 App 前，以及有没同步的改动时每隔几分钟自动同步；也可以点「立即同步」。连不上电脑时改动留在手机上，之后再同步。两边怎么合并：
+
+- **作答记录**：两边合并，不会覆盖。
+- **笔记**：只有一边改过就用改过的那份；两边都改过就用改得晚的那份，另一份存进电脑的 `data/notes/<专题>/_history/<页面>/`（文件名以 `-phone` 或 `-pc` 结尾），App 会提示。
+- **重置作答记录**：在哪边重置，同步后两边都重置；电脑上的旧记录移到 `data/records/archive/`。
+- **知识点**只在电脑上编辑，App 里只读。
+
+手机和电脑要连同一个 Wi-Fi。学校、咖啡店的网络一般不允许设备之间互连，这时让电脑连手机热点。配对之后，手机每次同步都用令牌签名，不再发送令牌本身，在 Wi-Fi 上截获的请求无法重放。配对信息和 App 的签名密钥保存在 `.local/`，不进 git。请备份 `.local/android-signing.*`：换了密钥签名的 App 不能覆盖安装旧版，只能卸载重装，手机上还没同步的内容会丢失。
 
 ### 让 AI agent 生成专题
 
@@ -152,7 +166,7 @@ python server.py --port 9000  Use a different port
 | 文件夹 | 内容 |
 | --- | --- |
 | `data/topics/` | 专题、页面、知识点、题目（格式见 `AGENTS.md`） |
-| `data/records/` | 作答记录，每答一题一行 |
+| `data/records/` | 作答记录，每答一题一行；`resets.json` 记下各专题最近一次重置的时间 |
 | `data/notes/` | 笔记，每页一个 `.md` 文件；旧版本在 `_history/` |
 
 备份就复制整个 `data/`。专题总览页底部的「重置作答记录」会把旧记录移到 `data/records/archive/`，不会删除。

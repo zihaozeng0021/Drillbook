@@ -3,10 +3,10 @@
 //
 // · 题库：从电脑下载的解析结果，整份替换；手机上不能编辑 knowledge.md
 // · 作答记录：同一时间、同一道题算同一条（作为主键），重复写入不会多出记录；
-//   手机上新做的记录带 local 标记，等同步功能把它们合并回电脑
-// · 笔记：手机上改过的带 dirty 标记；从电脑更新时保留手机这份，不会被覆盖；
+//   手机上新做的记录带 local 标记，同步时上传给电脑，电脑收下后去掉标记
+// · 笔记：手机上改过的带 dirty 标记，同步时交给电脑合并；
 //   覆盖前的旧版本留在 noteHistory 里（规则和电脑上的 _history/ 一样）
-// · 重置作答记录：旧记录移到 archives，并记下重置时间，之后从电脑更新时不再带回更早的记录
+// · 重置作答记录：旧记录移到 archives，并记下重置时间；同步时电脑上的这个专题也跟着重置
 
 const DB_NAME = 'drillbook';
 const DB_VERSION = 1;
@@ -216,62 +216,123 @@ export const local = {
   },
 };
 
-// 用从电脑下载的整份数据更新本机：
-// · 题库整份替换（电脑上删掉的专题，本机也不再显示）
-// · 作答记录：来自电脑的那部分以电脑为准（电脑上重置或删掉的，本机也删掉）；
-//   手机上新做的（local）保留；本机重置过的专题，不带回重置之前的记录
-// · 笔记：手机上改过、还没合并回电脑的保留手机这份；其余以电脑为准
-export async function applyBundle(bundle) {
+// 同步时发给电脑的改动：手机上新做的作答记录、改过的笔记、重置时间，以及已有题库的指纹（指纹没变的题库电脑不再重发）
+export async function collectChanges() {
+  return tx(['records', 'notes', 'kv', 'topics'], 'readonly', async (t) => {
+    const records = {};
+    for (const r of await req(t.objectStore('records').getAll())) {
+      if (r.local) (records[r.tid] = records[r.tid] || []).push(plain(r));
+    }
+    const notes = (await req(t.objectStore('notes').getAll()))
+      .filter((n) => n.dirty)
+      .map((n) => ({ tid: n.tid, pageId: n.pageId, content: n.content, base: n.base || '', updatedAt: n.updatedAt, hash: n.hash }));
+    const kv = t.objectStore('kv');
+    const resets = (await req(kv.get('resets'))) || {};
+    const hashes = (await req(kv.get('topicHashes'))) || {};
+    const have = new Set(await req(t.objectStore('topics').getAllKeys()));
+    const known = {};
+    for (const [tid, h] of Object.entries(hashes)) if (have.has(tid)) known[tid] = h;
+    return { records, notes, resets, known };
+  });
+}
+
+// 用电脑发回的数据更新本机（每次同步之后）。sent 是这次发出去的笔记 {「专题/页面」: 发出时的指纹}。
+// · 题库：电脑发来新版本就替换，没发（指纹没变）就保留；电脑上删掉的专题本机也删掉
+// · 重置时间取两边较晚的；早于它的记录不再算数：电脑来的直接删，手机上还没同步的移到本机存档
+// · 作答记录以电脑那份为准；手机上新做、还没同步的（local）保留，下次同步再上传
+// · 笔记：这次发出去、之后没再改过的换成电脑合并后的版本；同步过程中又改了的保留，下次再同步
+// 返回 { topics: 这次拿到新内容的专题 }
+export async function applyBundle(bundle, sent = new Map()) {
   const sizes = new Map();
   for (const [tid, d] of Object.entries(bundle.data || {})) {
     for (const [pageId, n] of Object.entries(d.notes || {})) sizes.set(`${tid}/${pageId}`, byteSize(n.content));
   }
-  return tx(['kv', 'topics', 'records', 'notes'], 'readwrite', async (t) => {
+  const fresh = [];
+  await tx(['kv', 'topics', 'records', 'notes', 'archives'], 'readwrite', async (t) => {
+    const now = Date.now();
     const kv = t.objectStore('kv');
     const topics = t.objectStore('topics');
     const records = t.objectStore('records');
     const notes = t.objectStore('notes');
+    const archives = t.objectStore('archives');
+    const stash = (tid, list) => {
+      if (list.length) archives.add({ tid, archivedAt: now, records: list.map(plain) });
+    };
     const resets = (await req(kv.get('resets'))) || {};
+    for (const [tid, at] of Object.entries(bundle.resets || {})) {
+      if (Number.isFinite(at) && at > (resets[tid] || 0)) resets[tid] = at;
+    }
+    const hashes = (await req(kv.get('topicHashes'))) || {};
     const keep = new Set(Object.keys(bundle.data || {}));
     for (const tid of await req(topics.getAllKeys())) {
+      if (!keep.has(tid)) {
+        topics.delete(tid);
+        delete hashes[tid];
+      }
+    }
+    const byTid = new Map();
+    for (const r of await req(records.getAll())) {
+      if (!byTid.has(r.tid)) byTid.set(r.tid, []);
+      byTid.get(r.tid).push(r);
+    }
+    for (const [tid, list] of byTid) {
       if (keep.has(tid)) continue;
-      topics.delete(tid);
-      for (const r of await req(records.index('tid').getAll(tid))) if (!r.local) records.delete([tid, r.t, r.q]);
+      stash(tid, list.filter((r) => r.local)); // 电脑上已经没有这个专题：没同步的记录移到本机存档，不再上传
+      for (const r of list) records.delete([tid, r.t, r.q]);
     }
 
     for (const [tid, d] of Object.entries(bundle.data || {})) {
-      topics.put(d.topic, tid);
+      if (d.topic) {
+        topics.put(d.topic, tid);
+        fresh.push(tid);
+      }
+      if (d.hash) hashes[tid] = d.hash;
       const cutoff = resets[tid] || 0;
       const fromPc = new Set();
       for (const r of d.records || []) {
         if (typeof r.q !== 'string' || !Number.isFinite(r.t) || r.t < cutoff) continue;
-        records.put({ ...r, tid });
+        records.put({ ...r, tid }); // 不带 local：电脑上已经有了
         fromPc.add(`${r.t}\n${r.q}`);
       }
-      for (const r of await req(records.index('tid').getAll(tid))) {
-        if (!r.local && !fromPc.has(`${r.t}\n${r.q}`)) records.delete([tid, r.t, r.q]);
+      const expired = [];
+      for (const r of byTid.get(tid) || []) {
+        if (fromPc.has(`${r.t}\n${r.q}`)) continue;
+        if (r.t < cutoff) {
+          if (r.local) expired.push(r);
+          records.delete([tid, r.t, r.q]);
+        } else if (!r.local) records.delete([tid, r.t, r.q]); // 电脑上已经删掉
       }
+      stash(tid, expired);
+
       const mine = new Map((await req(notes.getAll(pageRange(tid)))).map((n) => [n.pageId, n]));
+      const settled = (cur) => !cur?.dirty || sent.get(`${tid}/${cur.pageId}`) === cur.hash;
       for (const [pageId, n] of Object.entries(d.notes || {})) {
         const cur = mine.get(pageId);
         mine.delete(pageId);
-        if (cur?.dirty) continue;
+        if (!settled(cur)) {
+          // 同步过程中又改了：保留手机这份；如果电脑已经收下了发出去的那版，记住它，下次同步不会误判成两边都改过
+          if (n.hash === sent.get(`${tid}/${pageId}`)) notes.put({ ...cur, base: n.hash });
+          continue;
+        }
         notes.put({
           tid,
           pageId,
           content: n.content,
           hash: n.hash,
           size: sizes.get(`${tid}/${pageId}`) || 0,
-          updatedAt: n.mtime || Date.now(),
+          updatedAt: n.mtime || now,
           base: n.hash,
           dirty: false,
         });
       }
-      for (const cur of mine.values()) if (!cur.dirty) notes.delete([tid, cur.pageId]); // 电脑上已删掉
+      for (const cur of mine.values()) if (settled(cur)) notes.delete([tid, cur.pageId]); // 电脑上没有这份
     }
+    kv.put(resets, 'resets');
+    kv.put(hashes, 'topicHashes');
     kv.put(bundle.topics || [], 'topics');
-    kv.put(Date.now(), 'pulledAt');
+    kv.put(now, 'pulledAt');
   });
+  return { topics: fresh };
 }
 
 // 手机上新增、还没合并回电脑的内容

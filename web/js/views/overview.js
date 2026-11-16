@@ -173,7 +173,9 @@ export function renderOverview(main, topic) {
     const ok = await confirmDialog({
       title: '重置作答记录？',
       body: `当前共有 ${n} 条作答记录。重置后所有题目回到“未做”，${
-        APP ? '原记录存档在手机上' : '原记录文件会移到 data/records/archive/ 保存'
+        APP
+          ? '原记录存档在手机上；下次同步时电脑上的这个专题也会重置（旧记录移到 data/records/archive/）'
+          : '原记录文件会移到 data/records/archive/ 保存；已配对的手机同步后也会重置'
       }，不会删除。`,
       confirm: '重置',
       danger: true,

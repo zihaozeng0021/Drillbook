@@ -13,6 +13,11 @@ const SAVE_DELAY = 800;
 const KEEPALIVE_LIMIT = 60000; // 关页面时用 keepalive 请求补存，浏览器对请求体有约 64KB 限制
 const docs = new Map(); // 「专题/页面」-> NoteDoc，切换页面、标签后状态还在
 
+// 笔记在别处变了（手机 App 同步完）：已载入、没有未保存修改的笔记重新读取
+export function reloadOpenNotes() {
+  for (const doc of docs.values()) if (doc.loaded && !doc.busy) doc.load();
+}
+
 function docFor(tid, page) {
   const key = `${tid}/${page.id}`;
   let doc = docs.get(key);

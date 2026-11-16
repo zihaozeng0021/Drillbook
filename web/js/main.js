@@ -12,6 +12,7 @@ import { renderHome } from './views/home.js';
 import { renderOverview } from './views/overview.js';
 import { renderPage } from './views/page.js';
 import { renderReview } from './views/review.js';
+import { startAutoSync } from './autosync.js';
 
 const app = document.getElementById('app');
 let view = null;
@@ -121,3 +122,4 @@ function errorScreen(err) {
 initTooltip();
 window.addEventListener('hashchange', route);
 route();
+startAutoSync(); // 只在安卓 App 里生效

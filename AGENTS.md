@@ -419,4 +419,5 @@ data/topics/
 - 界面风格：深色海军蓝底；颜色只用来表示数据状态（薄弱 / 一般 / 掌握 / 未做）；不加装饰性文字。
 - 安卓 App（`android/`）只是 WebView 外壳，网站代码在打包时从 `web/` 复制进去；`android/build.py` 只用 Python 标准库调用 Android SDK，不用 Gradle。改了 `web/` 之后运行 `python android/build.py` 重新打包。
 - 手机 App 里的页面经 `web/js/api.js` 读写手机本机的数据（`web/js/local.js`），不直接请求电脑；新增或改动 `api.js` 的接口时，`local.js` 要实现同样的接口。
+- 手机与电脑的同步：手机端在 `web/js/phone.js`、`web/js/autosync.js`，电脑端在 `server.py` 的 `apply_phone_sync`。作答记录按「时间 + 题目」合并；笔记只有一边改过就用那份，两边都改过用改得晚的、另一份存进 `_history/`；各专题的重置时间记在 `data/records/resets.json`。改动作答记录、笔记的存储方式时，要同时照顾这三处。
 - 改完在浏览器里实际走一遍受影响的流程，并运行 `--check`。

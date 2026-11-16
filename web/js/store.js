@@ -2,6 +2,7 @@
 // 写入失败的记录暂存在浏览器里，下次成功连接时补写。
 
 import { api } from './api.js';
+import { APP } from './native.js';
 import { computeStats, rankQuestions, countStates } from './rank.js';
 
 const listeners = new Map();
@@ -35,10 +36,53 @@ export function invalidateTopic(tid) {
   cache.delete(tid);
 }
 
-// 手机 App 从电脑更新数据之后调用：全部重新读取
+// 手机 App 同步拿到新题库之后调用：全部重新读取
 export function invalidateAll() {
   cache.clear();
   topicsCache = null;
+}
+
+const recordsSig = (list) => `${list.length}:${list.length ? list[list.length - 1].t : 0}`;
+
+// 作答记录在别处变了（手机同步进来、手机 App 同步完）：重新读取已打开专题的记录，页面跟着刷新
+export async function refreshRecords() {
+  for (const topic of [...cache.values()]) {
+    const started = Date.now();
+    let rec;
+    try {
+      rec = await api.records(topic.id);
+    } catch {
+      continue;
+    }
+    const list = rec.records || [];
+    const pending = readPending(topic.id);
+    const sig = recordsSig(list);
+    if (sig === topic.recordsSig && !pending.length) continue;
+    // 读取期间刚做的题可能还没写进文件：先留着，重建后补回
+    const recent = [];
+    for (const l of topic.attempts.values()) for (const a of l) if (a.t >= started - 2000) recent.push(a);
+    topic.recordsSig = sig;
+    topic.attempts.clear();
+    const seen = new Set();
+    for (const r of [...list, ...pending, ...recent]) {
+      const key = `${r.t}\n${r.q}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      addAttempt(topic, r);
+    }
+    topic.version++;
+    emit('records', topic);
+  }
+}
+
+// 电脑上：回到这个标签页时检查一下，手机同步进来的记录直接显示，不用刷新页面
+if (!APP && typeof window !== 'undefined') {
+  let last = 0;
+  window.addEventListener('focus', () => {
+    if (Date.now() - last < 3000) return;
+    last = Date.now();
+    refreshRecords().catch(() => {});
+  });
 }
 
 export async function getTopic(tid, force = false) {
@@ -46,6 +90,7 @@ export async function getTopic(tid, force = false) {
   const [bank, rec] = await Promise.all([api.topic(tid), api.records(tid)]);
   const topic = build(bank, rec.records || []);
   topic.skippedRecords = rec.skipped || 0;
+  topic.recordsSig = recordsSig(rec.records || []);
   for (const r of readPending(tid)) addAttempt(topic, r);
   cache.set(tid, topic);
   if (readPending(tid).length) flushPending(tid);

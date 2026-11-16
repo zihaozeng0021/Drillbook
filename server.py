@@ -75,6 +75,8 @@ PAIR_TTL = 600             # 配对码有效期（秒）
 PAIR_MAX_TRIES = 5         # 配对码输错这么多次就作废
 PAIR_FAIL_LIMIT = 20       # 10 分钟内配对码总共输错这么多次，暂停配对（换配对码不会清零）
 PAIR_FAIL_WINDOW = 600
+NONCE_TTL = 120            # 手机签名请求用的一次性随机数，有效期（秒）
+NONCE_MAX = 64             # 同时有效的随机数上限
 LAN_NETS = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 ID_RE = re.compile(r"^[\w-]+$")                      # 专题 / 页面 / 知识点 / 题目 id
@@ -480,16 +482,79 @@ def append_records(tid: str, items: list) -> int:
     return len(clean)
 
 
+def resets_file() -> Path:
+    return RECORDS_DIR / "resets.json"
+
+
+def read_resets() -> dict:
+    """每个专题最近一次重置的时间（毫秒）。早于它的作答记录不再算数；手机同步时两边都按它清理。"""
+    try:
+        data = json.loads(resets_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: int(v) for k, v in data.items() if isinstance(k, str) and isinstance(v, (int, float))}
+
+
+def write_resets(resets: dict) -> None:
+    RECORDS_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = resets_file().with_name("resets.json.tmp")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(dict(sorted(resets.items())), f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, resets_file())
+
+
+def archive_target(tid: str) -> Path:
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = f"{tid}-{datetime.now():%Y%m%d-%H%M%S}"
+    target, n = ARCHIVE_DIR / f"{stamp}.jsonl", 1
+    while target.exists():
+        target, n = ARCHIVE_DIR / f"{stamp}_{n}.jsonl", n + 1
+    return target
+
+
 def archive_records(tid: str) -> str | None:
-    """重置 = 把记录文件移动到 data/records/archive/，不直接删除。"""
+    """重置 = 把记录文件移动到 data/records/archive/，不直接删除；并记下重置时间（手机同步时按它清理）。"""
+    src = records_file(tid)
+    with records_lock:
+        resets = read_resets()
+        resets[tid] = int(time.time() * 1000)
+        write_resets(resets)
+        if not src.exists():
+            return None
+        target = archive_target(tid)
+        shutil.move(str(src), str(target))
+    return f"data/records/archive/{target.name}"
+
+
+def archive_before_locked(tid: str, cutoff: int) -> int:
+    """手机上重置过：把早于重置时间的记录移到 archive/，之后的留下。返回移走的条数；调用方须持有 records_lock。"""
     src = records_file(tid)
     if not src.exists():
-        return None
-    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    name = f"{tid}-{datetime.now():%Y%m%d-%H%M%S}.jsonl"
-    with records_lock:
-        shutil.move(str(src), str(ARCHIVE_DIR / name))
-    return f"data/records/archive/{name}"
+        return 0
+    old, keep = [], []
+    for line in src.read_text(encoding="utf-8-sig").splitlines():
+        if not line.strip():
+            continue
+        try:
+            t = json.loads(line).get("t")
+        except (ValueError, AttributeError):
+            t = None
+        (old if isinstance(t, (int, float)) and t < cutoff else keep).append(line)
+    if not old:
+        return 0
+    with open(archive_target(tid), "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(old) + "\n")
+    if keep:
+        tmp = src.with_name(src.name + ".tmp")
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(keep) + "\n")
+        os.replace(tmp, src)
+    else:
+        src.unlink()
+    return len(old)
 
 
 # ───────────────────────────── 页面笔记 ─────────────────────────────
@@ -633,11 +698,12 @@ def write_knowledge(page_dir: Path, content: str, base: str | None) -> tuple[int
 
 # ───────────────────────────── 手机连接 ─────────────────────────────
 #
-# 安卓 App（android/）把网站代码打包在自己里面离线运行，数据通过局域网从这台电脑下载。
+# 安卓 App（android/）把网站代码打包在自己里面离线运行，和这台电脑通过局域网双向同步。
 # · 默认关闭。在电脑网页的「连接手机」里打开后，额外监听一个局域网端口（默认 8766）；
 #   这个端口只提供下面几个手机用的接口和 App 安装包，不提供网页和其他接口
-# · 第一次连接要输入电脑网页上显示的 6 位配对码（10 分钟内有效，输错 5 次作废）；
-#   配对后手机拿到一个长期令牌，之后凭令牌下载数据。电脑上只保存令牌的指纹
+# · 第一次连接要输入电脑网页上显示的 6 位配对码（10 分钟内有效，输错 5 次作废），手机拿到一个长期令牌。
+#   之后令牌不再在网络上传输：同步请求用它签名（见 PhoneLink.verify）。电脑上只保存令牌的 sha256
+# · 同步规则见 apply_phone_sync / merge_phone_note；各专题的重置时间记在 data/records/resets.json
 # · 开关、端口和已配对的手机保存在 .local/phone.json（不进 git）
 
 def lan_addresses() -> list[str]:
@@ -668,8 +734,16 @@ def lan_addresses() -> list[str]:
     return out
 
 
-def phone_bundle(server_id: str) -> dict:
-    """手机下载的整份数据：题库（解析好的）、作答记录、笔记。"""
+def topic_fingerprint(p: dict) -> str:
+    """题库内容的指纹（不含随笔记变化的 noteSize）：手机上已有同一份时不再重复下发。"""
+    pages = [{k: v for k, v in pg.items() if k != "noteSize"} for pg in p["pages"]]
+    return digest(json.dumps(dict(p, pages=pages), ensure_ascii=False, sort_keys=True).encode("utf-8"))
+
+
+def phone_bundle(server_id: str, known=None) -> dict:
+    """手机拿到的电脑上的全部数据：题库（解析好的）、作答记录、笔记、重置时间。
+    known 是手机上已有的题库指纹 {专题: 指纹}，指纹没变的专题只发记录和笔记。"""
+    known = known if isinstance(known, dict) else {}
     topics, data = [], {}
     for p in all_topics():
         tid = p["id"]
@@ -681,10 +755,125 @@ def phone_bundle(server_id: str) -> dict:
                 mtime = int(nf.stat().st_mtime * 1000) if raw else 0
             if raw:
                 notes[pg["id"]] = {"content": decode_note(raw), "hash": digest(raw), "mtime": mtime}
+        fp = topic_fingerprint(p)
         topics.append(topic_summary(p))
-        data[tid] = {"topic": p, "records": read_records(tid)[0], "notes": notes}
+        data[tid] = {"topic": None if known.get(tid) == fp else p, "hash": fp, "records": read_records(tid)[0], "notes": notes}
     topics.sort(key=lambda p: (p["order"], p["name"]))
-    return {"app": "drillbook", "serverId": server_id, "time": int(time.time() * 1000), "topics": topics, "data": data}
+    return {
+        "app": "drillbook",
+        "serverId": server_id,
+        "time": int(time.time() * 1000),
+        "topics": topics,
+        "data": data,
+        "resets": read_resets(),
+    }
+
+
+def save_note_copy(tid: str, page_id: str, raw: bytes, who: str) -> str | None:
+    """两边都改过的笔记：没被采用的那份存进 _history/<页面>/，文件名带 -phone（手机的）或 -pc（电脑的）。"""
+    if not raw:
+        return None
+    hdir = NOTES_DIR / tid / "_history" / page_id
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    with notes_lock:
+        hdir.mkdir(parents=True, exist_ok=True)
+        target, n = hdir / f"{stamp}-{who}.md", 1
+        while target.exists():
+            target, n = hdir / f"{stamp}-{who}_{n}.md", n + 1
+        target.write_bytes(raw)
+    return f"data/notes/{tid}/_history/{page_id}/{target.name}"
+
+
+def merge_phone_note(tid: str, page_id: str, content: str, base, updated_at, page_exists: bool) -> dict | None:
+    """合并手机上改过的一份笔记。base 是手机上次同步时电脑那份的指纹：
+    · 等于电脑当前的指纹 → 电脑没改过，用手机的
+    · 不等 → 两边都改过：用改得晚的那份，另一份另存，不丢"""
+    content = content.replace("\r\n", "\n")
+    mine = content.encode("utf-8") if content.strip() else b""
+    path = note_file(tid, page_id)
+    with notes_lock:
+        raw = path.read_bytes() if path.is_file() else b""
+        mtime = int(path.stat().st_mtime * 1000) if raw else 0
+    current = digest(raw)
+    if digest(mine) == current:
+        return None  # 两边已经一样
+    info = {"tid": tid, "pageId": page_id}
+    if not page_exists:  # 电脑上已经没有这个页面：手机这份另存
+        return dict(info, conflict=True, kept="pc", saved=save_note_copy(tid, page_id, mine, "phone"))
+    pc_changed = base != current
+    if pc_changed and not (isinstance(updated_at, (int, float)) and updated_at > mtime):
+        return dict(info, conflict=True, kept="pc", saved=save_note_copy(tid, page_id, mine, "phone"))
+    saved = save_note_copy(tid, page_id, raw, "pc") if pc_changed else None
+    status, _ = write_note(tid, page_id, content, current)
+    if status != 200:  # 就在这一刻电脑上又改了：这次不动，下次同步再合并
+        return dict(info, retry=True)
+    return dict(info, conflict=True, kept="phone", saved=saved) if pc_changed else dict(info, kept="phone")
+
+
+def apply_phone_sync(body: dict) -> dict:
+    """把手机上的改动合并进电脑：重置、作答记录、笔记。返回合并结果。
+    · 重置取两边较晚的那次；手机的更晚时，电脑上更早的记录移到 data/records/archive/
+    · 作答记录两边合并，同一时间、同一道题算同一条；早于重置时间的不要"""
+    report: dict = {"records": 0, "notes": [], "conflicts": [], "resets": []}
+    topics = {d.name: d for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)}
+    now = int(time.time() * 1000)
+
+    phone_resets = body.get("resets") if isinstance(body.get("resets"), dict) else {}
+    with records_lock:
+        resets = read_resets()
+        changed = False
+        for tid, t in phone_resets.items():
+            if tid in topics and isinstance(t, (int, float)) and resets.get(tid, 0) < t <= now + 86_400_000:
+                moved = archive_before_locked(tid, int(t))
+                resets[tid] = int(t)
+                changed = True
+                report["resets"].append({"tid": tid, "archived": moved})
+        if changed:
+            write_resets(resets)
+
+    uploads = body.get("records") if isinstance(body.get("records"), dict) else {}
+    for tid, items in uploads.items():
+        if tid not in topics or not isinstance(items, list):
+            continue
+        cutoff = resets.get(tid, 0)
+        seen = {(int(r["t"]), r["q"]) for r in read_records(tid)[0]}
+        fresh = []
+        for r in items:
+            if not isinstance(r, dict) or not isinstance(r.get("q"), str) or not isinstance(r.get("t"), (int, float)):
+                continue
+            key = (int(r["t"]), r["q"][:200])
+            if key[0] < cutoff or key[0] > now + 86_400_000 or key in seen:
+                continue
+            seen.add(key)
+            fresh.append(r)
+        report["records"] += append_records(tid, fresh)
+
+    for n in body.get("notes") if isinstance(body.get("notes"), list) else []:
+        if not isinstance(n, dict):
+            continue
+        tid, page_id, content = n.get("tid"), n.get("pageId"), n.get("content")
+        if tid not in topics or not isinstance(page_id, str) or not ID_RE.match(page_id) or not isinstance(content, str):
+            continue
+        result = merge_phone_note(tid, page_id, content, n.get("base"), n.get("updatedAt"), page_id in page_ids(topics[tid]))
+        if result:
+            report["conflicts" if result.get("conflict") else "notes"].append(result)
+    return report
+
+
+def log_sync(device: dict, report: dict) -> None:
+    parts = []
+    if report["records"]:
+        parts.append(f"{report['records']} 条作答记录")
+    if report["notes"]:
+        parts.append(f"{len(report['notes'])} 份笔记")
+    if report["resets"]:
+        parts.append("重置 " + "、".join(r["tid"] for r in report["resets"]))
+    if parts:
+        print(f"手机同步（{device.get('name')}）：收到 " + "，".join(parts), flush=True)
+    for c in report["conflicts"]:
+        kept = "手机" if c.get("kept") == "phone" else "电脑"
+        where = f"，另一份存在 {c['saved']}" if c.get("saved") else ""
+        print(f"  笔记 {c['tid']}/{c['pageId']} 两边都改过：保留{kept}上的版本{where}", flush=True)
 
 
 class PhoneLink:
@@ -697,6 +886,7 @@ class PhoneLink:
         self.error = ""
         self.pairing: dict | None = None  # {"code", "expires", "tries"}
         self.failures: list[float] = []   # 最近输错配对码的时间
+        self.nonces: dict[str, float] = {}  # 签名请求用的一次性随机数 → 过期时间
         self.config = self._load()
 
     @staticmethod
@@ -812,18 +1002,35 @@ class PhoneLink:
             self._save()
             return 200, {"token": token, "deviceId": device["id"], "serverId": self.config["serverId"]}
 
-    def device_for(self, auth) -> dict | None:
-        """按请求头里的令牌找到已配对的手机，并记下最近一次连接的时间。"""
-        if not isinstance(auth, str) or not auth.startswith("Bearer "):
-            return None
-        fp = hashlib.sha256(auth[7:].strip().encode()).hexdigest()
+    def new_nonce(self) -> str:
         with self.lock:
-            for d in self.config["devices"]:
-                if hmac.compare_digest(d["tokenHash"], fp):
-                    d["lastSeen"] = int(time.time() * 1000)
-                    self._save()
-                    return d
-        return None
+            now = time.time()
+            self.nonces = {k: v for k, v in self.nonces.items() if v > now}
+            while len(self.nonces) >= NONCE_MAX:
+                self.nonces.pop(next(iter(self.nonces)))
+            nonce = secrets.token_hex(16)
+            self.nonces[nonce] = now + NONCE_TTL
+            return nonce
+
+    def verify(self, headers, method: str, path: str, raw: bytes) -> dict | None:
+        """校验手机的签名请求，返回对应的手机。配对之后令牌不再在网络上传输：手机用 sha256(令牌) 作密钥，
+        对「方法、路径、一次性随机数、请求体指纹」做 HMAC；随机数用一次就作废，截获的请求不能重放。"""
+        did = headers.get("X-Drillbook-Device") or ""
+        nonce = headers.get("X-Drillbook-Nonce") or ""
+        sig = headers.get("X-Drillbook-Signature") or ""
+        with self.lock:
+            if self.nonces.pop(nonce, 0) < time.time():
+                return None
+            device = next((d for d in self.config["devices"] if d.get("id") == did), None)
+            if not device:
+                return None
+            msg = f"{method}\n{path}\n{nonce}\n{hashlib.sha256(raw).hexdigest()}".encode("utf-8")
+            expected = hmac.new(bytes.fromhex(device["tokenHash"]), msg, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected, sig):
+                return None
+            device["lastSeen"] = int(time.time() * 1000)
+            self._save()
+            return device
 
     def remove_device(self, did: str) -> None:
         with self.lock:
@@ -854,12 +1061,14 @@ class ApiMixin:
         self.end_headers()
         self.wfile.write(body)
 
-    def read_body(self):
+    def read_raw(self) -> bytes:
         length = int(self.headers.get("Content-Length") or 0)
         if length < 0 or length > 5_000_000:  # 负数会让 read() 一直读到连接关闭
             raise ValueError("请求体长度无效")
-        raw = self.rfile.read(length) if length else b""
-        return json.loads(raw.decode("utf-8") or "null")
+        return self.rfile.read(length) if length else b""
+
+    def read_body(self):
+        return json.loads(self.read_raw().decode("utf-8") or "null")
 
     def is_json(self) -> bool:
         """写操作要求 JSON 请求头：别的网站只能发「简单请求」（text/plain、表单），带不上这个头。"""
@@ -888,11 +1097,24 @@ class ApiMixin:
             body = body if isinstance(body, dict) else {}
             status, payload = link.pair(body.get("code"), body.get("name"))
             self.send_json(payload, status)
-        elif method == "GET" and parts == ["phone", "pull"]:
-            if not link.device_for(self.headers.get("Authorization")):
-                self.send_json({"error": "这台手机还没配对，或已在电脑上被移除"}, 401)
-            else:
-                self.send_json(phone_bundle(link.config["serverId"]), compress=True)
+        elif method == "GET" and parts == ["phone", "nonce"]:
+            self.send_json({"nonce": link.new_nonce()})
+        elif method == "POST" and parts == ["phone", "sync"]:
+            # 同步：先把手机上的改动合并进电脑，再把合并后的全部数据发回手机
+            if not self.is_json():
+                self.send_json({"error": "请求需要 JSON 格式"}, 415)
+                return True
+            raw = self.read_raw()
+            device = link.verify(self.headers, method, "/api/phone/sync", raw)
+            if not device:
+                self.send_json({"error": "这台手机需要重新配对（可能已在电脑上被移除）"}, 401)
+                return True
+            body = json.loads(raw.decode("utf-8") or "null")
+            body = body if isinstance(body, dict) else {}
+            report = apply_phone_sync(body)
+            log_sync(device, report)
+            bundle = phone_bundle(link.config["serverId"], body.get("known"))
+            self.send_json({"report": report, "bundle": bundle}, compress=True)
         else:
             return False
         return True
