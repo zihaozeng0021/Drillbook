@@ -12,7 +12,7 @@
 
 无论做什么任务都要遵守：
 
-1. 不改 `data/records/`、`data/notes/`、`server.py`、`web/`、`start.bat`；只有用户明确要求改网站时才动代码。
+1. 不改 `data/records/`、`data/notes/`、`server.py`、`web/`、`android/`、`start.bat`，不碰 `.local/`；只有用户明确要求改网站时才动代码。
 2. 不改任何已有的专题 id、页面 id、知识点 id、题目 id，作答记录和笔记靠它们关联。
 3. 用户没有说明内容放在哪里、而站内有同类或重叠的专题时，先问用户，等用户决定后再写文件。
 4. 每道题考理解和运用，不出年份、提出者、论文名、版本号、编号这类背诵题。
@@ -27,7 +27,7 @@
 | 项 | 说明 |
 | --- | --- |
 | 内容写在哪 | `data/topics/<专题id>/` |
-| 生成内容时不要改 | `data/records/`（作答记录）、`data/notes/`（用户笔记）、`server.py`、`web/`、`start.bat` |
+| 生成内容时不要改 | `data/records/`（作答记录）、`data/notes/`（用户笔记）、`server.py`、`web/`、`android/`、`start.bat`、`.local/`（本机配置与密钥） |
 | 盘点已有内容 | `python server.py --outline`：所有专题 → 页面 → 知识点，以及每个知识点有几道题 |
 | 校验 | `python server.py --check`：格式错误和覆盖提示；有「错误」时退出码为 1 |
 | 生效方式 | 不用重启服务，用户刷新浏览器即可看到 |
@@ -417,4 +417,6 @@ data/topics/
 - 不引入依赖：后端只用 Python 标准库；前端是原生 ES 模块，第三方库放在 `web/vendor/`，不走 CDN（用户可能离线，或在访问不了境外 CDN 的网络里）。
 - `data/` 下的文件格式保持向后兼容：旧的 `data/positions/`、`position.json`、`jd.md`、`company` 字段要继续能读。
 - 界面风格：深色海军蓝底；颜色只用来表示数据状态（薄弱 / 一般 / 掌握 / 未做）；不加装饰性文字。
+- 安卓 App（`android/`）只是 WebView 外壳，网站代码在打包时从 `web/` 复制进去；`android/build.py` 只用 Python 标准库调用 Android SDK，不用 Gradle。改了 `web/` 之后运行 `python android/build.py` 重新打包。
+- 手机 App 里的页面经 `web/js/api.js` 读写手机本机的数据（`web/js/local.js`），不直接请求电脑；新增或改动 `api.js` 的接口时，`local.js` 要实现同样的接口。
 - 改完在浏览器里实际走一遍受影响的流程，并运行 `--check`。

@@ -35,6 +35,12 @@ export function invalidateTopic(tid) {
   cache.delete(tid);
 }
 
+// 手机 App 从电脑更新数据之后调用：全部重新读取
+export function invalidateAll() {
+  cache.clear();
+  topicsCache = null;
+}
+
 export async function getTopic(tid, force = false) {
   if (!force && cache.has(tid)) return cache.get(tid);
   const [bank, rec] = await Promise.all([api.topic(tid), api.records(tid)]);

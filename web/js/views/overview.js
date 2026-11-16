@@ -4,6 +4,7 @@ import { h, icon, cell, plainText, modal, confirmDialog, toast, kindTag } from '
 import { md } from '../md.js';
 import * as store from '../store.js';
 import { STATES, STATE_LABEL } from '../rank.js';
+import { APP } from '../native.js';
 
 // 来源面板的标题按专题类型变化；未知类型统一叫「来源」
 const SOURCE_TITLE = { job: '岗位要求', book: '书目与范围', course: '课程大纲', exam: '考试大纲' };
@@ -171,7 +172,9 @@ export function renderOverview(main, topic) {
     const n = [...topic.attempts.values()].reduce((a, l) => a + l.length, 0);
     const ok = await confirmDialog({
       title: '重置作答记录？',
-      body: `当前共有 ${n} 条作答记录。重置后所有题目回到“未做”，原记录文件会移到 data/records/archive/ 保存，不会删除。`,
+      body: `当前共有 ${n} 条作答记录。重置后所有题目回到“未做”，${
+        APP ? '原记录存档在手机上' : '原记录文件会移到 data/records/archive/ 保存'
+      }，不会删除。`,
       confirm: '重置',
       danger: true,
     });

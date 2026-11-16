@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标的前景：与网站图标相同的 3×3 方格，放在 108dp 画布中间的安全区里 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#3FD6A3" android:pathData="M32.8,30h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+    <path android:fillColor="#3FD6A3" android:pathData="M49.8,30h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+    <path android:fillColor="#F3B857" android:pathData="M66.8,30h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+    <path android:fillColor="#3FD6A3" android:pathData="M32.8,47h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+    <path android:fillColor="#FF6F87" android:pathData="M49.8,47h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+    <path android:fillColor="#2B3A55" android:pathData="M66.8,47h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+    <path android:fillColor="#F3B857" android:pathData="M32.8,64h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+    <path android:fillColor="#2B3A55" android:pathData="M49.8,64h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+    <path android:fillColor="#2B3A55" android:pathData="M66.8,64h8.4a2.8,2.8 0 0 1 2.8,2.8v8.4a2.8,2.8 0 0 1 -2.8,2.8h-8.4a2.8,2.8 0 0 1 -2.8,-2.8v-8.4a2.8,2.8 0 0 1 2.8,-2.8z" />
+</vector>

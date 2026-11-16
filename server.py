@@ -17,22 +17,29 @@ Drillbook · 本地服务（只用 Python 标准库，无需安装任何依赖�
   data/records/<专题>.jsonl 作答记录（每行一次作答，程序自动追加）
   data/notes/<专题>/<页面>.md 页面笔记（网页里编辑并自动保存，也可以直接用编辑器打开）
   data/topics/<专题>/pages/<页面>/_history/  网页里编辑 knowledge.md 时自动保留的旧版本（加载时忽略）
+  .local/                  本机配置（不进 git）：手机连接的开关和已配对的手机、安卓 App 的签名密钥
+  android/                 安卓 App（手机版）：python android/build.py 打包，输出 android/build/drillbook.apk
 """
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
+import hmac
+import ipaddress
 import json
 import os
 import re
+import secrets
 import shutil
+import socket
 import sys
 import threading
 import time
 import traceback
 import webbrowser
 from datetime import datetime
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -60,6 +67,15 @@ ARCHIVE_DIR = RECORDS_DIR / "archive"
 NOTES_DIR = DATA_DIR / "notes"
 NOTE_HISTORY_KEEP = 30     # 每个页面的笔记 / 知识点文件保留的旧版本数
 NOTE_SNAPSHOT_GAP = 600    # 连续编辑时，至少间隔这么多秒才留一份旧版本
+LOCAL_DIR = ROOT / ".local"             # 本机配置，不进 git
+PHONE_FILE = LOCAL_DIR / "phone.json"   # 手机连接：开关、端口、已配对的手机
+APK_FILE = ROOT / "android" / "build" / "drillbook.apk"
+PHONE_PORT = 8766          # 手机连接用的局域网端口（被占用时顺延）
+PAIR_TTL = 600             # 配对码有效期（秒）
+PAIR_MAX_TRIES = 5         # 配对码输错这么多次就作废
+PAIR_FAIL_LIMIT = 20       # 10 分钟内配对码总共输错这么多次，暂停配对（换配对码不会清零）
+PAIR_FAIL_WINDOW = 600
+LAN_NETS = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 ID_RE = re.compile(r"^[\w-]+$")                      # 专题 / 页面 / 知识点 / 题目 id
 TITLE_RE = re.compile(r"^#\s+(.+?)\s*$")              # knowledge.md 第一行：# 页面标题
@@ -376,23 +392,26 @@ def load_topic(tdir: Path) -> dict:
     }
 
 
+def topic_summary(p: dict) -> dict:
+    return {
+        "id": p["id"],
+        "name": p["name"],
+        "kind": p["kind"],
+        "origin": p["origin"],
+        "description": p["description"],
+        "order": p["order"],
+        "pageCount": len(p["pages"]),
+        "questionCount": sum(len(pg["questions"]) for pg in p["pages"]),
+        "issueCount": len(p["issues"]),
+    }
+
+
+def all_topics() -> list[dict]:
+    return [load_topic(d) for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)]
+
+
 def list_topics() -> list[dict]:
-    out = []
-    for d in visible_dirs(TOPICS_DIR):
-        if not ID_RE.match(d.name):
-            continue
-        p = load_topic(d)
-        out.append({
-            "id": p["id"],
-            "name": p["name"],
-            "kind": p["kind"],
-            "origin": p["origin"],
-            "description": p["description"],
-            "order": p["order"],
-            "pageCount": len(p["pages"]),
-            "questionCount": sum(len(pg["questions"]) for pg in p["pages"]),
-            "issueCount": len(p["issues"]),
-        })
+    out = [topic_summary(p) for p in all_topics()]
     out.sort(key=lambda p: (p["order"], p["name"]))
     return out
 
@@ -612,9 +631,273 @@ def write_knowledge(page_dir: Path, content: str, base: str | None) -> tuple[int
     return 200, {"hash": digest(new_raw), "size": len(new_raw), "issues": issues}
 
 
+# ───────────────────────────── 手机连接 ─────────────────────────────
+#
+# 安卓 App（android/）把网站代码打包在自己里面离线运行，数据通过局域网从这台电脑下载。
+# · 默认关闭。在电脑网页的「连接手机」里打开后，额外监听一个局域网端口（默认 8766）；
+#   这个端口只提供下面几个手机用的接口和 App 安装包，不提供网页和其他接口
+# · 第一次连接要输入电脑网页上显示的 6 位配对码（10 分钟内有效，输错 5 次作废）；
+#   配对后手机拿到一个长期令牌，之后凭令牌下载数据。电脑上只保存令牌的指纹
+# · 开关、端口和已配对的手机保存在 .local/phone.json（不进 git）
+
+def lan_addresses() -> list[str]:
+    """这台电脑在局域网里的 IPv4 地址，默认出口网卡的排在最前。"""
+    found: list[str] = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("192.0.2.1", 9))  # UDP 的 connect 不发包，只用来查出口网卡
+            found.append(s.getsockname()[0])
+        finally:
+            s.close()
+    except OSError:
+        pass
+    try:
+        found += socket.gethostbyname_ex(socket.gethostname())[2]
+    except OSError:
+        pass
+    out: list[str] = []
+    for ip in found:
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        # 只要家庭 / 局域网地址段（与 App 允许连接的范围一致）；代理软件的虚拟网卡（如 198.18.x）不算
+        if any(addr in net for net in LAN_NETS) and ip not in out:
+            out.append(ip)
+    return out
+
+
+def phone_bundle(server_id: str) -> dict:
+    """手机下载的整份数据：题库（解析好的）、作答记录、笔记。"""
+    topics, data = [], {}
+    for p in all_topics():
+        tid = p["id"]
+        notes = {}
+        for pg in p["pages"]:
+            nf = note_file(tid, pg["id"])
+            with notes_lock:
+                raw = nf.read_bytes() if nf.is_file() else b""
+                mtime = int(nf.stat().st_mtime * 1000) if raw else 0
+            if raw:
+                notes[pg["id"]] = {"content": decode_note(raw), "hash": digest(raw), "mtime": mtime}
+        topics.append(topic_summary(p))
+        data[tid] = {"topic": p, "records": read_records(tid)[0], "notes": notes}
+    topics.sort(key=lambda p: (p["order"], p["name"]))
+    return {"app": "drillbook", "serverId": server_id, "time": int(time.time() * 1000), "topics": topics, "data": data}
+
+
+class PhoneLink:
+    """手机连接的状态：配对码、已配对的手机、局域网端口的开关。"""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.httpd: ThreadingHTTPServer | None = None
+        self.port: int | None = None
+        self.error = ""
+        self.pairing: dict | None = None  # {"code", "expires", "tries"}
+        self.failures: list[float] = []   # 最近输错配对码的时间
+        self.config = self._load()
+
+    @staticmethod
+    def _load() -> dict:
+        cfg: dict = {}
+        try:
+            data = json.loads(PHONE_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                cfg = data
+        except (OSError, ValueError):
+            pass
+        sid = cfg.get("serverId")
+        cfg["serverId"] = sid if isinstance(sid, str) and ID_RE.match(sid) else secrets.token_hex(8)
+        cfg["enabled"] = cfg.get("enabled") is True
+        port = cfg.get("port")
+        cfg["port"] = port if isinstance(port, int) and 1024 <= port <= 65535 else PHONE_PORT
+        devices = cfg.get("devices")
+        cfg["devices"] = [d for d in devices if isinstance(d, dict) and isinstance(d.get("tokenHash"), str)] if isinstance(devices, list) else []
+        return cfg
+
+    def _save(self) -> None:
+        LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = PHONE_FILE.with_name(PHONE_FILE.name + ".tmp")
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(self.config, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp, PHONE_FILE)
+
+    def status(self) -> dict:
+        addresses = lan_addresses()
+        apk = APK_FILE.stat() if APK_FILE.is_file() else None
+        with self.lock:
+            p = self.pairing
+            if p and p["expires"] < time.time():
+                p = self.pairing = None
+            return {
+                "enabled": self.config["enabled"],
+                "running": self.httpd is not None,
+                "port": self.port or self.config["port"],
+                "error": self.error,
+                "addresses": addresses,
+                "code": {"value": p["code"], "expires": int(p["expires"] * 1000)} if p else None,
+                "devices": [{k: d.get(k) for k in ("id", "name", "pairedAt", "lastSeen")} for d in self.config["devices"]],
+                "apk": {"size": apk.st_size, "mtime": int(apk.st_mtime * 1000)} if apk else None,
+            }
+
+    def set_enabled(self, on: bool) -> None:
+        with self.lock:
+            self.config["enabled"] = on
+            self._save()
+        if on:
+            self.start()
+        else:
+            self.stop()
+
+    def start(self) -> bool:
+        with self.lock:
+            if self.httpd:
+                return True
+            base = self.config["port"]
+            for p in range(base, base + 10):
+                try:
+                    httpd = PhoneServer(("0.0.0.0", p), PhoneHandler)
+                    break
+                except OSError:
+                    continue
+            else:
+                self.error = f"端口 {base}-{base + 9} 都被占用了"
+                return False
+            self.httpd, self.port, self.error = httpd, p, ""
+        threading.Thread(target=httpd.serve_forever, name="phone", daemon=True).start()
+        return True
+
+    def stop(self) -> None:
+        with self.lock:
+            httpd, self.httpd, self.port, self.pairing = self.httpd, None, None, None
+        if httpd:
+            httpd.shutdown()
+            httpd.server_close()
+
+    def new_code(self) -> None:
+        with self.lock:
+            self.pairing = {"code": f"{secrets.randbelow(10**6):06d}", "expires": time.time() + PAIR_TTL, "tries": 0}
+
+    def pair(self, code, name) -> tuple[int, dict]:
+        with self.lock:
+            now = time.time()
+            self.failures = [t for t in self.failures if now - t < PAIR_FAIL_WINDOW]
+            if len(self.failures) >= PAIR_FAIL_LIMIT:
+                return 429, {"error": "配对码输错的次数太多，请 10 分钟后再试"}
+            p = self.pairing
+            if not p or p["expires"] < now:
+                self.pairing = None
+                return 403, {"error": "配对码已失效：在电脑上的「连接手机」里换一个"}
+            if not isinstance(code, str) or not hmac.compare_digest(re.sub(r"\s", "", code).encode(), p["code"].encode()):
+                self.failures.append(now)
+                p["tries"] += 1
+                if p["tries"] >= PAIR_MAX_TRIES:
+                    self.pairing = None
+                    return 403, {"error": "配对码输错次数太多，已作废：在电脑上换一个"}
+                return 403, {"error": "配对码不对"}
+            token = secrets.token_hex(32)
+            now = int(time.time() * 1000)
+            device = {
+                "id": secrets.token_hex(4),
+                "name": name.strip()[:40] if isinstance(name, str) and name.strip() else "手机",
+                "tokenHash": hashlib.sha256(token.encode()).hexdigest(),
+                "pairedAt": now,
+                "lastSeen": now,
+            }
+            self.config["devices"].append(device)
+            self.pairing = None
+            self._save()
+            return 200, {"token": token, "deviceId": device["id"], "serverId": self.config["serverId"]}
+
+    def device_for(self, auth) -> dict | None:
+        """按请求头里的令牌找到已配对的手机，并记下最近一次连接的时间。"""
+        if not isinstance(auth, str) or not auth.startswith("Bearer "):
+            return None
+        fp = hashlib.sha256(auth[7:].strip().encode()).hexdigest()
+        with self.lock:
+            for d in self.config["devices"]:
+                if hmac.compare_digest(d["tokenHash"], fp):
+                    d["lastSeen"] = int(time.time() * 1000)
+                    self._save()
+                    return d
+        return None
+
+    def remove_device(self, did: str) -> None:
+        with self.lock:
+            kept = [d for d in self.config["devices"] if d.get("id") != did]
+            if len(kept) != len(self.config["devices"]):
+                self.config["devices"] = kept
+                self._save()
+
+
+link = PhoneLink()
+
+
 # ───────────────────────────── HTTP 服务 ─────────────────────────────
 
-class Handler(SimpleHTTPRequestHandler):
+class ApiMixin:
+    """电脑网页用的服务和手机连接用的局域网端口共用：JSON 收发、手机接口、App 安装包。"""
+
+    def send_json(self, obj, status: int = 200, compress: bool = False):
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        gz = compress and len(body) > 2048 and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        if gz:
+            body = gzip.compress(body, 6)
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        if gz:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def read_body(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        if length < 0 or length > 5_000_000:  # 负数会让 read() 一直读到连接关闭
+            raise ValueError("请求体长度无效")
+        raw = self.rfile.read(length) if length else b""
+        return json.loads(raw.decode("utf-8") or "null")
+
+    def is_json(self) -> bool:
+        """写操作要求 JSON 请求头：别的网站只能发「简单请求」（text/plain、表单），带不上这个头。"""
+        return (self.headers.get("Content-Type") or "").lower().startswith("application/json")
+
+    def send_apk(self):
+        if not APK_FILE.is_file():
+            return self.send_json({"error": "还没有打包 App：在项目文件夹里运行 python android/build.py"}, 404)
+        data = APK_FILE.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/vnd.android.package-archive")
+        self.send_header("Content-Disposition", 'attachment; filename="drillbook.apk"')
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def handle_phone(self, method: str, parts: list[str]) -> bool:
+        """手机用的接口（两个服务都提供）。不是这几个接口时返回 False。"""
+        if method == "GET" and parts == ["phone", "hello"]:
+            self.send_json({"app": "drillbook", "serverId": link.config["serverId"], "name": socket.gethostname()})
+        elif method == "POST" and parts == ["phone", "pair"]:
+            if not self.is_json():
+                self.send_json({"error": "请求需要 JSON 格式"}, 415)
+                return True
+            body = self.read_body()
+            body = body if isinstance(body, dict) else {}
+            status, payload = link.pair(body.get("code"), body.get("name"))
+            self.send_json(payload, status)
+        elif method == "GET" and parts == ["phone", "pull"]:
+            if not link.device_for(self.headers.get("Authorization")):
+                self.send_json({"error": "这台手机还没配对，或已在电脑上被移除"}, 401)
+            else:
+                self.send_json(phone_bundle(link.config["serverId"]), compress=True)
+        else:
+            return False
+        return True
+
+class Handler(ApiMixin, SimpleHTTPRequestHandler):
     server_version = "Drillbook/2.0"
 
     def __init__(self, *args, **kwargs):
@@ -639,6 +922,8 @@ class Handler(SimpleHTTPRequestHandler):
         url = urlparse(self.path)
         if url.path.startswith("/api/"):
             return self.handle_api("GET", url.path)
+        if url.path == "/drillbook.apk":
+            return self.send_apk()
         return super().do_GET()
 
     def do_POST(self):
@@ -653,24 +938,46 @@ class Handler(SimpleHTTPRequestHandler):
             return self.handle_api("PUT", url.path)
         self.send_error(405)
 
-    def send_json(self, obj, status: int = 200):
-        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+    def local_host(self) -> bool:
+        """请求是否以本机地址访问：别的网站借 DNS 重绑定指向 127.0.0.1 时，Host 是它自己的域名。"""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        return host in ("", "127.0.0.1", "localhost") or host.endswith(".localhost")
 
-    def read_body(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        if length > 5_000_000:
-            raise ValueError("请求体过大")
-        raw = self.rfile.read(length) if length else b""
-        return json.loads(raw.decode("utf-8") or "null")
+    def handle_phone_admin(self, method: str, parts: list[str]):
+        """电脑网页里的「连接手机」：开关、配对码、已配对的手机。"""
+        if parts == ["phone"] and method == "GET":
+            return self.send_json(link.status())
+        if parts == ["phone"] and method == "POST":
+            body = self.read_body()
+            if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
+                return self.send_json({"error": "缺少 enabled"}, 400)
+            link.set_enabled(body["enabled"])
+            if body["enabled"] and link.httpd:
+                link.new_code()
+            return self.send_json(link.status())
+        if parts == ["phone", "code"] and method == "POST":
+            link.new_code()
+            return self.send_json(link.status())
+        if len(parts) == 4 and parts[1] == "devices" and parts[3] == "remove" and method == "POST":
+            link.remove_device(parts[2])
+            return self.send_json(link.status())
+        return self.send_json({"error": "未知接口"}, 404)
 
     def handle_api(self, method: str, path: str):
         parts = [unquote(p) for p in path.split("/")[2:] if p]
         try:
+            # 只接受本机网页的请求：别的网站可以让浏览器向 127.0.0.1 发请求（改笔记、打开手机端口），
+            # 但改不了 Host，也发不出带 JSON 请求头的跨站请求（需要预检，本服务不响应）
+            if not self.local_host():
+                return self.send_json({"error": "只能用 127.0.0.1 或 localhost 访问"}, 403)
+            if method in ("POST", "PUT") and not self.is_json():
+                return self.send_json({"error": "请求需要 JSON 格式（Content-Type: application/json）"}, 415)
+
+            if parts[:1] == ["phone"]:
+                if self.handle_phone(method, parts):
+                    return None
+                return self.handle_phone_admin(method, parts)
+
             if method == "GET" and parts == ["topics"]:
                 return self.send_json(list_topics())
 
@@ -741,6 +1048,55 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     # Windows 上 SO_REUSEADDR 会允许两个进程抢同一个端口，必须关闭
     allow_reuse_address = os.name != "nt"
+
+
+class PhoneHandler(ApiMixin, BaseHTTPRequestHandler):
+    """手机连接用的局域网端口：只提供手机接口和 App 安装包。"""
+
+    server_version = "Drillbook/2.0"
+    timeout = 15  # 空闲或很慢的连接不长期占着线程
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def ip_host(self) -> bool:
+        """只接受以 IP 地址访问：别的网站借 DNS 重绑定指向这台电脑时，Host 是它自己的域名。"""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+        if not host or host.lower() == "localhost":
+            return True
+        try:
+            ipaddress.ip_address(host)
+            return True
+        except ValueError:
+            return False
+
+    def route(self, method: str):
+        path = urlparse(self.path).path
+        try:
+            if not self.ip_host():
+                return self.send_json({"error": "请用 IP 地址访问"}, 403)
+            if method == "GET" and path == "/drillbook.apk":
+                return self.send_apk()
+            parts = [unquote(p) for p in path.split("/")[2:] if p] if path.startswith("/api/") else []
+            if not (parts and self.handle_phone(method, parts)):
+                self.send_json({"error": "未知接口"}, 404)
+        except Exception as e:
+            traceback.print_exc()
+            self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+
+    def do_GET(self):
+        self.route("GET")
+
+    def do_POST(self):
+        self.route("POST")
+
+
+class PhoneServer(Server):
+    pass
 
 
 def make_server(port: int) -> tuple[Server, int]:
@@ -822,6 +1178,12 @@ def main() -> None:
     print(f"Drillbook 已启动：{url}")
     print(f"题库目录：{TOPICS_DIR}")
     print(f"作答记录：{RECORDS_DIR}")
+    if link.config["enabled"]:
+        if link.start():
+            where = "、".join(f"{ip}:{link.port}" for ip in lan_addresses()) or f"本机局域网地址:{link.port}"
+            print(f"手机连接：已开启，手机上填 {where}")
+        else:
+            print(f"手机连接：没能开启（{link.error}）")
     print("关闭此窗口或按 Ctrl+C 停止服务。")
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
@@ -830,6 +1192,7 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        link.stop()
         httpd.server_close()
 
 

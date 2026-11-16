@@ -38,6 +38,8 @@ const ICONS = {
   play: '<path d="M8 5.5v13l10.5-6.5z"/>',
   note: '<path d="M15.2 4.8l4 4L9 19H5v-4z"/><path d="M13.2 6.8l4 4"/>',
   edit: '<path d="M7 3.5h7l4.5 4.5v12.5h-11.5z"/><path d="M14 3.5v4.5h4.5"/><path d="M9.5 13h5M9.5 16.5h5"/>',
+  phone: '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 17.5h2"/>',
+  download: '<path d="M12 4.5v10.5M7.5 10.5l4.5 4.5 4.5-4.5"/><path d="M5 19.5h14"/>',
 };
 
 export function icon(name, cls = '') {

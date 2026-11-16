@@ -6,6 +6,7 @@ import * as store from '../store.js';
 import { STATE_LABEL, aggregateState } from '../rank.js';
 import { getSession, newSession, mountQuiz } from './quiz.js';
 import { mountKnowledgeEditor } from './editor.js';
+import { APP } from '../native.js';
 
 export function renderPage(main, topic, pageId, tab, params, shell) {
   const page = topic.pageById.get(pageId);
@@ -36,9 +37,9 @@ export function renderPage(main, topic, pageId, tab, params, shell) {
   paintNotesBtn();
   const offNotes = panel.onChange(paintNotesBtn);
 
-  // 编辑本页的 knowledge.md：?edit=1 进入编辑模式，退出按钮在编辑器里
-  const editing = tab === 'learn' && params.get('edit') === '1';
-  const editLink = editing
+  // 编辑本页的 knowledge.md：?edit=1 进入编辑模式，退出按钮在编辑器里（手机 App 里只读，不提供）
+  const editing = !APP && tab === 'learn' && params.get('edit') === '1';
+  const editLink = editing || APP
     ? null
     : h(
         'a',

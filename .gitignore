@@ -4,6 +4,12 @@
 /data/topics/*
 !/data/topics/sample/
 
+# Local machine config and secrets: phone pairing tokens, Android signing key
+/.local/
+
+# Android build output
+/android/build/
+
 # Python bytecode
 __pycache__/
 *.pyc
