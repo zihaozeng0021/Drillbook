@@ -1,7 +1,7 @@
 // 手机 App 连接电脑：配对，以及双向同步。
 //
 // · 配对：填电脑地址和电脑上显示的配对码，拿到一个长期令牌
-// · 同步：把手机上的改动（新做的题、改过的笔记、重置）发给电脑，电脑合并后把全部数据发回，手机整体采用。
+// · 同步：把手机上的改动（新做的题、改过的笔记、重置、专题顺序）发给电脑，电脑合并后把全部数据发回，手机整体采用。
 //   请求用令牌签名，令牌本身不再在网络上传输；签名里带电脑给的一次性随机数，截获的请求不能重放
 
 import { nativeRequest, deviceInfo } from './native.js';
@@ -115,10 +115,11 @@ async function runSync(onProgress) {
       onProgress?.('正在同步…');
       const changes = await collectChanges();
       const notes = changes.notes.map(({ hash, ...n }) => n);
-      const body = JSON.stringify({ records: changes.records, notes, resets: changes.resets, known: changes.known });
+      const body = JSON.stringify({ records: changes.records, notes, resets: changes.resets, known: changes.known, order: changes.order });
       const res = await signedCall(addr, link, key, 'POST', '/api/phone/sync', body, 60000);
       if (res.bundle?.serverId !== link.serverId || !res.bundle.data) throw new Error('电脑发回的数据不完整');
-      const applied = await applyBundle(res.bundle, new Map(changes.notes.map((n) => [`${n.tid}/${n.pageId}`, n.hash])));
+      const sentNotes = new Map(changes.notes.map((n) => [`${n.tid}/${n.pageId}`, n.hash]));
+      const applied = await applyBundle(res.bundle, sentNotes, changes.order?.at);
       link.addresses = [addr, ...link.addresses.filter((a) => a !== addr)];
       link.computer = hello.name || link.computer;
       await kvSet('link', link);

@@ -1,4 +1,5 @@
 // 专题列表（安卓 App 里另有「连接电脑」：第一次使用时配对，之后和电脑自动同步）
+// 专题可以拖动排序：电脑上写进各专题 topic.json 的 order，手机上先存在本机、同步时交给电脑
 
 import { h, icon, logo, cell, plainText, kindTag, relTime, toast } from '../ui.js';
 import * as store from '../store.js';
@@ -7,6 +8,7 @@ import { APP } from '../native.js';
 import { localChanges } from '../local.js';
 import { getLink, pair, normalizeAddress } from '../phone.js';
 import { status as syncStatus, onStatus, syncNow } from '../autosync.js';
+import { sortable } from '../sortable.js';
 import { openPhoneDialog } from './phonelink.js';
 
 export async function renderHome(app) {
@@ -24,17 +26,35 @@ export async function renderHome(app) {
       );
       return {};
     }
-    const bar = phoneBar(link);
-    renderList(app, topics, bar.el);
-    return { destroy: bar.destroy };
+    return renderList(app, topics, phoneBar(link));
   }
   return renderList(app, await store.getTopics(true), null);
 }
 
-// 只在还停在专题列表时重画（同步完成时用户可能已经点进了某个专题）；经由路由重画，旧页面会被正确收尾
+let sorter = null; // 专题列表的拖动排序
+let redrawLater = false;
+
+// 只在还停在专题列表时重画（同步完成时用户可能已经点进了某个专题）；经由路由重画，旧页面会被正确收尾。
+// 正在拖动专题时先不重画，松手、保存完再画
 function rerender() {
   const seg = location.hash.replace(/^#/, '').split('?')[0].split('/').filter(Boolean);
-  if (seg[0] !== 'p' || !seg[1]) window.dispatchEvent(new HashChangeEvent('hashchange'));
+  if (seg[0] === 'p' && seg[1]) return;
+  if (sorter?.busy) {
+    redrawLater = true;
+    return;
+  }
+  window.dispatchEvent(new HashChangeEvent('hashchange'));
+}
+
+// 拖动排序之后保存新顺序；没保存成功就提示，并重画成实际保存着的顺序
+async function saveOrder(ids, bar) {
+  try {
+    await store.saveTopicOrder(ids);
+    bar?.refresh();
+  } catch (err) {
+    toast(`顺序没能保存：${err.message}`, 'bad', 5000);
+    rerender();
+  }
 }
 
 function renderList(app, topics, bar) {
@@ -51,7 +71,7 @@ function renderList(app, topics, bar) {
         ? null
         : h('button', { class: 'btn sm ghost home-phone', type: 'button', onclick: openPhoneDialog }, icon('phone'), '连接手机'),
     ),
-    bar,
+    bar?.el,
     list,
   );
 
@@ -73,7 +93,7 @@ function renderList(app, topics, bar) {
     list.append(
       h(
         'a',
-        { class: 'topic-row', href },
+        { class: 'topic-row', href, 'data-id': p.id, draggable: 'false' },
         h(
           'div',
           { class: 'topic-info' },
@@ -120,8 +140,28 @@ function renderList(app, topics, bar) {
       });
   }
 
+  let saving = Promise.resolve();
+  const own = sortable(list, {
+    item: '.topic-row',
+    onSort: (rows) => {
+      saving = saveOrder(rows.map((r) => r.dataset.id), bar);
+    },
+    onEnd: () =>
+      saving.then(() => {
+        if (!redrawLater) return;
+        redrawLater = false;
+        rerender();
+      }),
+  });
+  sorter = own;
+
   app.replaceChildren(root);
-  return {};
+  return {
+    destroy() {
+      own.destroy();
+      bar?.destroy();
+    },
+  };
 }
 
 function readout(value, label, tone = '') {
@@ -152,8 +192,8 @@ function phoneBar(link) {
     sub.textContent = s.state === 'error' ? `${s.error}${s.at ? `（上次同步：${relTime(s.at)}）` : ''}` : where;
     btn.disabled = s.state === 'syncing';
     const c = await localChanges();
-    const parts = [c.records ? `${c.records} 次作答` : '', c.notes ? `${c.notes} 份笔记` : ''].filter(Boolean);
-    pending.textContent = parts.length ? `还有 ${parts.join('、')}没同步到电脑` : '';
+    const what = [c.records ? `${c.records} 次作答` : '', c.notes ? `${c.notes} 份笔记` : '', c.order ? '专题顺序' : ''].filter(Boolean).join('、');
+    pending.textContent = !what ? '' : c.records || c.notes ? `还有 ${what}没同步到电脑` : `${what}还没同步到电脑`;
     notes.replaceChildren(...(await conflictLines(s.report)));
   }
 
@@ -179,10 +219,10 @@ function phoneBar(link) {
     el.replaceWith(connectForm(link, rerender, rerender));
   }
 
-  return { el, destroy: off };
+  return { el, destroy: off, refresh: () => paint(syncStatus) };
 }
 
-// 最近一次同步里两边都改过的笔记：保留了哪一份，另一份存在哪里
+// 最近一次同步里两边都改过的笔记：保留了哪一份，另一份存在哪里；专题顺序两边都改过时保留了哪边的
 async function conflictLines(report) {
   const out = [];
   for (const c of report?.conflicts || []) {
@@ -196,6 +236,13 @@ async function conflictLines(report) {
     out.push(
       h('p', { class: 'small' }, icon('warn'), ` 笔记「${page}」两边都改过：保留了${kept}上的版本${c.saved ? `，另一份存在电脑的 ${c.saved}` : ''}`),
     );
+  }
+  const order = report?.order;
+  if (order?.conflict) {
+    out.push(h('p', { class: 'small' }, icon('warn'), ` 专题顺序两边都调整过：保留了${order.kept === 'phone' ? '手机' : '电脑'}上的顺序`));
+  }
+  if (order?.error) {
+    out.push(h('p', { class: 'small' }, icon('warn'), ` 手机上的专题顺序没能写进电脑：${order.error}`));
   }
   return out;
 }

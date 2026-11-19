@@ -14,6 +14,7 @@ Content is organised into **topics**. A topic is one learning track built from o
 - **Mistake review** (错题复习): all questions ranked by recent error rate. Recent and repeated mistakes come first, unanswered questions sit in the middle, and questions you always get right go last. The ⓘ button on the review page shows the formula.
 - **Notes** (笔记): a Markdown notes panel on every page, saved as `.md` files you can also open in any editor.
 - **Edit in place**: the 编辑 button on a knowledge page opens that page's `knowledge.md` in an editor. Saving re-parses the page, warns when a removed knowledge point still has questions, and keeps earlier versions in the page folder's `_history/`.
+- **Topic order**: drag a topic on the topic list to a new place (on the phone, press and hold it first), or focus it and press Alt+↑ / Alt+↓. The order is saved as `order` in each topic's `topic.json`.
 
 ### Start
 
@@ -46,6 +47,7 @@ The app syncs by itself when you open it, when you come back to it and before yo
 - **Answers** from both sides are combined; nothing is overwritten.
 - **Notes**: if only one side changed a note, that version is used. If both changed it, the more recent edit wins and the other version is saved in the computer's `data/notes/<topic>/_history/<page>/` (file name ending in `-phone` or `-pc`); the app tells you when this happens.
 - **Resetting a topic's answers** on either side resets it on both after the next sync. The computer moves its old answers to `data/records/archive/`.
+- **Topic order**: if only one side reordered the topics, that order is used. If both did, the more recent one wins and the app tells you.
 - **Knowledge pages** are edited on the computer only; the app shows them read-only.
 
 The phone and the computer must be on the same Wi-Fi. School and café networks often block devices from reaching each other; connect the computer to the phone's hotspot instead. After pairing, the phone signs each sync request instead of sending its token, so a request captured on the Wi-Fi can't be replayed. Pairing details and the app's signing key are kept in `.local/`, which is not committed. Back up `.local/android-signing.*`: an app signed with a different key can't be installed over the old one, so you would have to uninstall it and lose anything not yet synced.
@@ -122,6 +124,7 @@ python server.py --port 9000  Use a different port
 - **错题复习**：全部题目按近期错误率排序。最近错的、反复错的排在最前，没做过的在中间，一直答对的在最后。复习页的 ⓘ 按钮里有排序公式。
 - **笔记**：每页一个 Markdown 笔记面板，自动保存成 `.md` 文件，也可以用任何编辑器打开。
 - **页内编辑**：知识点页右上角的「编辑」直接修改这一页的 `knowledge.md`。保存后按新内容重新解析，删掉了仍有题目关联的知识点会提示，旧版本保留在页面文件夹的 `_history/`。
+- **专题排序**：在专题列表里把专题拖到新的位置（手机上先长按再拖），或者让焦点停在专题上按 Alt+↑ / Alt+↓。顺序保存在各专题 `topic.json` 的 `order` 里。
 
 ### 启动
 
@@ -154,6 +157,7 @@ App 会在打开时、回到 App 时、离开 App 前，以及有没同步的改
 - **作答记录**：两边合并，不会覆盖。
 - **笔记**：只有一边改过就用改过的那份；两边都改过就用改得晚的那份，另一份存进电脑的 `data/notes/<专题>/_history/<页面>/`（文件名以 `-phone` 或 `-pc` 结尾），App 会提示。
 - **重置作答记录**：在哪边重置，同步后两边都重置；电脑上的旧记录移到 `data/records/archive/`。
+- **专题顺序**：只有一边调整过就用那边的；两边都调整过就用调整得晚的，App 会提示。
 - **知识点**只在电脑上编辑，App 里只读。
 
 手机和电脑要连同一个 Wi-Fi。学校、咖啡店的网络一般不允许设备之间互连，这时让电脑连手机热点。配对之后，手机每次同步都用令牌签名，不再发送令牌本身，在 Wi-Fi 上截获的请求无法重放。配对信息和 App 的签名密钥保存在 `.local/`，不进 git。请备份 `.local/android-signing.*`：换了密钥签名的 App 不能覆盖安装旧版，只能卸载重装，手机上还没同步的内容会丢失。

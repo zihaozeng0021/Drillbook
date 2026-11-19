@@ -250,7 +250,7 @@ data/topics/
 | `kind` | 可选。`job`（岗位）、`book`（书）、`course`（课程）、`exam`（考试）；也可以写其他文字，网站会原样显示。合并了不同类型的来源时写主要的那种 |
 | `origin` | 可选。出处：公司、作者或出版社、学校或讲者。合并了多家来源时可以留空 |
 | `description` | 可选。一句话说明覆盖范围 |
-| `order` | 专题列表的顺序，小的在前。新专题取现有最大值 + 1（示例专题 `sample` 的 99 不算） |
+| `order` | 专题列表的顺序，小的在前。新专题取现有最大值 + 1（示例专题 `sample` 的 99 不算）。用户在专题列表里拖动排序后，网站会把各专题的 `order` 改写成 1、2、3…… |
 
 ### source.md
 
@@ -419,5 +419,5 @@ data/topics/
 - 界面风格：深色海军蓝底；颜色只用来表示数据状态（薄弱 / 一般 / 掌握 / 未做）；不加装饰性文字。
 - 安卓 App（`android/`）只是 WebView 外壳，网站代码在打包时从 `web/` 复制进去；`android/build.py` 只用 Python 标准库调用 Android SDK，不用 Gradle。改了 `web/` 之后运行 `python android/build.py` 重新打包。
 - 手机 App 里的页面经 `web/js/api.js` 读写手机本机的数据（`web/js/local.js`），不直接请求电脑；新增或改动 `api.js` 的接口时，`local.js` 要实现同样的接口。
-- 手机与电脑的同步：手机端在 `web/js/phone.js`、`web/js/autosync.js`，电脑端在 `server.py` 的 `apply_phone_sync`。作答记录按「时间 + 题目」合并；笔记只有一边改过就用那份，两边都改过用改得晚的、另一份存进 `_history/`；各专题的重置时间记在 `data/records/resets.json`。改动作答记录、笔记的存储方式时，要同时照顾这三处。
+- 手机与电脑的同步：手机端在 `web/js/phone.js`、`web/js/autosync.js`，电脑端在 `server.py` 的 `apply_phone_sync`。作答记录按「时间 + 题目」合并；笔记只有一边改过就用那份，两边都改过用改得晚的、另一份存进 `_history/`；专题顺序（拖动排序）也是只有一边改过就用那份、两边都改过用改得晚的；各专题的重置时间记在 `data/records/resets.json`。改动作答记录、笔记、专题顺序的存储方式时，要同时照顾这三处。
 - 改完在浏览器里实际走一遍受影响的流程，并运行 `--check`。

@@ -36,6 +36,7 @@ const enc = encodeURIComponent;
 
 const remote = {
   topics: () => request('GET', '/api/topics'),
+  saveTopicOrder: (ids) => request('PUT', '/api/topic-order', { order: ids }), // 返回新的专题列表
   topic: (tid) => request('GET', `/api/topics/${enc(tid)}`),
   records: (tid) => request('GET', `/api/records/${enc(tid)}`),
   saveRecords: (tid, records) => request('POST', `/api/records/${enc(tid)}`, records),

@@ -31,6 +31,18 @@ export async function getTopics(force = false) {
   return topicsCache;
 }
 
+// 专题列表拖动排序后保存（ids：全部专题按新顺序）。连续拖了几次就按先后依次保存，最后一次为准
+let orderQueue = Promise.resolve();
+
+export function saveTopicOrder(ids) {
+  const run = orderQueue.then(() => api.saveTopicOrder(ids));
+  orderQueue = run.catch(() => {});
+  return run.then((list) => {
+    topicsCache = list;
+    return list;
+  });
+}
+
 // 知识点文件在网页里改过之后调用：下次进入专题时重新读取并解析
 export function invalidateTopic(tid) {
   cache.delete(tid);

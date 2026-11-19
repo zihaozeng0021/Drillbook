@@ -766,6 +766,40 @@ select {
   height: 10px;
 }
 
+/* 拖动排序：按住专题拖到新位置（触屏上先长按）；文字不可选，免得拖动时选中文字或拖出链接 */
+.topic-row {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+
+.topic-list.sorting .topic-row {
+  pointer-events: none;
+  transition: transform 0.18s ease;
+}
+
+.topic-list .topic-row.dragging {
+  position: relative;
+  z-index: 2;
+  border-color: var(--line-2);
+  background: var(--panel-2);
+  box-shadow: 0 18px 44px rgba(3, 7, 14, 0.6);
+}
+
+.topic-list.sorting .topic-row.dragging {
+  transition: none;
+}
+
+.topic-list .topic-row.settling {
+  transition: transform 0.18s ease;
+}
+
+html.is-sorting,
+html.is-sorting * {
+  cursor: grabbing !important;
+}
+
 /* ── 专题总览 ─────────────────────────────────────────────────────────── */
 
 .overview {

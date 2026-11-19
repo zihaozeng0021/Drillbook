@@ -418,6 +418,95 @@ def list_topics() -> list[dict]:
     return out
 
 
+# ───────────────────────────── 专题顺序 ─────────────────────────────
+#
+# 专题列表按 topic.json 的 order 排（小的在前，相同时按名字）。在网页上拖动专题后，
+# 按新顺序把各专题的 order 改写成 1、2、3……（只写值变了的文件）。手机上拖动过的顺序在同步时合并，见 merge_phone_order
+
+meta_lock = threading.RLock()
+
+
+def merge_order(current: list[str], wanted) -> list[str]:
+    """按 wanted 的先后重排 current：wanted 里提到的专题按它的先后，占住它们在 current 里原来的那几个位置；
+    没提到的专题（例如网页打开之后才新建的）位置不变，已经不存在的专题忽略。"""
+    have = set(current)
+    picked: list[str] = []
+    seen: set[str] = set()
+    for tid in wanted if isinstance(wanted, list) else []:
+        if isinstance(tid, str) and tid in have and tid not in seen:
+            seen.add(tid)
+            picked.append(tid)
+    it = iter(picked)
+    return [next(it) if tid in seen else tid for tid in current]
+
+
+def same_relative_order(a: list, b: list) -> bool:
+    """两份顺序里共同的专题先后是否一致（只是多了或少了专题，不算改过顺序）。"""
+    a = [t for t in a if isinstance(t, str)]
+    b = [t for t in b if isinstance(t, str)]
+    common = set(a) & set(b)
+    return [t for t in a if t in common] == [t for t in b if t in common]
+
+
+def write_topic_order(wanted) -> int:
+    """按 wanted（专题 id 的列表）重排专题，把新的 order 写进各专题的 topic.json。返回改写了几个文件。
+    有 topic.json 读不出来时一个都不改，抛出 ValueError。"""
+    with meta_lock:
+        current = [p["id"] for p in list_topics()]
+        plan = []
+        for i, tid in enumerate(merge_order(current, wanted), 1):
+            tdir = TOPICS_DIR / tid
+            mfile = first_existing(tdir, META_FILES)
+            meta = {}
+            if mfile:
+                try:
+                    meta = read_json(mfile)
+                except ValueError:
+                    meta = None
+                if not isinstance(meta, dict):
+                    raise ValueError(f"{TOPICS_REL}/{tid}/{mfile.name} 的格式有误，修好之后再调整顺序")
+            if type(meta.get("order")) is int and meta["order"] == i:
+                continue
+            meta["order"] = i
+            plan.append((mfile or tdir / "topic.json", meta))
+        for path, meta in plan:
+            tmp = path.with_name(path.name + ".tmp")
+            with open(tmp, "wb") as f:
+                f.write((json.dumps(meta, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+    return len(plan)
+
+
+def topic_order_time() -> int:
+    """电脑上的专题顺序最近一次可能变化的时间（毫秒）：各专题 topic.json 里最晚的修改时间。"""
+    latest = 0.0
+    for d in visible_dirs(TOPICS_DIR):
+        f = first_existing(d, META_FILES) if ID_RE.match(d.name) else None
+        if f:
+            latest = max(latest, f.stat().st_mtime)
+    return int(latest * 1000)
+
+
+def merge_phone_order(order: dict) -> dict:
+    """合并手机上拖动过的专题顺序。base 是手机上次同步时电脑上的顺序：
+    · 电脑上的顺序和 base 一致 → 电脑没改过，用手机的
+    · 不一致 → 两边都改过：用改得晚的（电脑这边按 topic.json 的修改时间算）"""
+    with meta_lock:
+        current = [p["id"] for p in list_topics()]
+        base = order.get("base") if isinstance(order.get("base"), list) else []
+        pc_changed = not same_relative_order(current, base)
+        at = order.get("at")
+        if pc_changed and not (isinstance(at, (int, float)) and at > topic_order_time()):
+            return {"kept": "pc", "conflict": True}
+        try:
+            changed = write_topic_order(order.get("ids"))
+        except (OSError, ValueError) as e:
+            return {"kept": "pc", "error": str(e)}
+    return {"kept": "phone", "conflict": pc_changed, "changed": changed}
+
+
 # ───────────────────────────── 作答记录 ─────────────────────────────
 
 def records_file(tid: str) -> Path:
@@ -811,10 +900,11 @@ def merge_phone_note(tid: str, page_id: str, content: str, base, updated_at, pag
 
 
 def apply_phone_sync(body: dict) -> dict:
-    """把手机上的改动合并进电脑：重置、作答记录、笔记。返回合并结果。
+    """把手机上的改动合并进电脑：重置、作答记录、笔记、专题顺序。返回合并结果。
     · 重置取两边较晚的那次；手机的更晚时，电脑上更早的记录移到 data/records/archive/
-    · 作答记录两边合并，同一时间、同一道题算同一条；早于重置时间的不要"""
-    report: dict = {"records": 0, "notes": [], "conflicts": [], "resets": []}
+    · 作答记录两边合并，同一时间、同一道题算同一条；早于重置时间的不要
+    · 笔记见 merge_phone_note，专题顺序见 merge_phone_order"""
+    report: dict = {"records": 0, "notes": [], "conflicts": [], "resets": [], "order": None}
     topics = {d.name: d for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)}
     now = int(time.time() * 1000)
 
@@ -857,6 +947,10 @@ def apply_phone_sync(body: dict) -> dict:
         result = merge_phone_note(tid, page_id, content, n.get("base"), n.get("updatedAt"), page_id in page_ids(topics[tid]))
         if result:
             report["conflicts" if result.get("conflict") else "notes"].append(result)
+
+    order = body.get("order")
+    if isinstance(order, dict) and isinstance(order.get("ids"), list):
+        report["order"] = merge_phone_order(order)
     return report
 
 
@@ -868,12 +962,19 @@ def log_sync(device: dict, report: dict) -> None:
         parts.append(f"{len(report['notes'])} 份笔记")
     if report["resets"]:
         parts.append("重置 " + "、".join(r["tid"] for r in report["resets"]))
+    order = report.get("order") or {}
+    if order.get("changed"):
+        parts.append("专题顺序")
     if parts:
         print(f"手机同步（{device.get('name')}）：收到 " + "，".join(parts), flush=True)
     for c in report["conflicts"]:
         kept = "手机" if c.get("kept") == "phone" else "电脑"
         where = f"，另一份存在 {c['saved']}" if c.get("saved") else ""
         print(f"  笔记 {c['tid']}/{c['pageId']} 两边都改过：保留{kept}上的版本{where}", flush=True)
+    if order.get("conflict"):
+        print(f"  专题顺序两边都改过：保留{'手机' if order.get('kept') == 'phone' else '电脑'}上的顺序", flush=True)
+    if order.get("error"):
+        print(f"  手机上的专题顺序没能写入：{order['error']}", flush=True)
 
 
 class PhoneLink:
@@ -1201,6 +1302,17 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
                 return self.handle_phone_admin(method, parts)
 
             if method == "GET" and parts == ["topics"]:
+                return self.send_json(list_topics())
+
+            if method == "PUT" and parts == ["topic-order"]:
+                body = self.read_body()
+                ids = body.get("order") if isinstance(body, dict) else None
+                if not isinstance(ids, list) or not all(isinstance(t, str) for t in ids):
+                    return self.send_json({"error": "缺少专题顺序 order（专题 id 的列表）"}, 400)
+                try:
+                    write_topic_order(ids)
+                except ValueError as e:
+                    return self.send_json({"error": str(e)}, 400)
                 return self.send_json(list_topics())
 
             if method == "GET" and len(parts) == 2 and parts[0] == "topics":

@@ -49,7 +49,7 @@ export async function syncNow({ quiet = false } = {}) {
 
 async function hasChanges() {
   const c = await localChanges();
-  return c.records > 0 || c.notes > 0;
+  return c.records > 0 || c.notes > 0 || c.order;
 }
 
 export function startAutoSync() {
