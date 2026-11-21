@@ -12,7 +12,7 @@ Drillbook · 本地服务（只用 Python 标准库，无需安装任何依赖�
 
 目录约定（数据格式详见 AGENTS.md）：
   web/                     前端页面
-  data/topics/<专题>/      题库：topic.json、source.md、pages/<NN-页面>/{knowledge.md, questions.json}
+  data/topics/<专题>/      题库：topic.json、source.md、mindmap.md（思维导图，可选）、pages/<NN-页面>/{knowledge.md, questions.json}
                            （仍兼容旧名 data/positions/、position.json、jd.md）
   data/records/<专题>.jsonl 作答记录（每行一次作答，程序自动追加）
   data/notes/<专题>/<页面>.md 页面笔记（网页里编辑并自动保存，也可以直接用编辑器打开）
@@ -61,6 +61,7 @@ if not TOPICS_DIR.is_dir() and (DATA_DIR / "positions").is_dir():
 TOPICS_REL = TOPICS_DIR.relative_to(ROOT).as_posix()
 META_FILES = ("topic.json", "position.json")  # 专题元数据；后者是旧名
 SOURCE_FILES = ("source.md", "jd.md")         # 来源原文（JD、目录、大纲）；后者是旧名
+MINDMAP_FILE = "mindmap.md"                   # 思维导图（可选）
 KIND_LABEL = {"job": "岗位", "book": "书", "course": "课程", "exam": "考试"}
 RECORDS_DIR = DATA_DIR / "records"
 ARCHIVE_DIR = RECORDS_DIR / "archive"
@@ -84,6 +85,8 @@ TITLE_RE = re.compile(r"^#\s+(.+?)\s*$")              # knowledge.md 第一行�
 POINT_RE = re.compile(r"^##\s+(.+?)\s*(?:\{#([\w-]+)\})?\s*$")  # ## 知识点标题 {#id}
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 PAGE_DIR_RE = re.compile(r"^(\d+)[-_ ]+(.+)$")         # 01-rag -> (1, "rag")
+MM_ITEM_RE = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])\s+(.*?)\s*$")       # mindmap.md 的一个节点：- 文字
+MM_REF_RE = re.compile(r"\s*\{\s*([\w-]*)\s*(?:#\s*([\w-]+))?\s*\}$")  # 行尾 {页面id} / {页面id#知识点id} / {#知识点id}
 LETTERS = "ABCDEFGH"
 
 MIME = {
@@ -323,6 +326,79 @@ def load_page(page_dir: Path, issues: Issues) -> dict:
     }
 
 
+def parse_mindmap(text: str, root_title: str, pages: list[dict], issues: Issues) -> dict | None:
+    """把 mindmap.md 解析成树：{text, page?, point?, children?}。
+    · 第一行可以是 # 标题（根节点的文字，默认用专题名），其余每行一个列表项「- 文字」，缩进表示层级
+    · 行尾的 {页面id}、{页面id#知识点id}、{#知识点id} 把节点关联到页面或知识点；{#知识点id} 属于最近的上级页面
+    · 关联了页面或知识点、自己没写文字的节点，显示页面或知识点的标题
+    · 每个知识点应在导图里出现一次：缺了或重复都给出提示"""
+    by_page = {pg["id"]: pg for pg in pages}
+    root: dict = {"text": root_title}
+    stack: list[tuple[int, dict, str | None]] = [(-1, root, None)]  # （缩进，节点，所属页面）
+    used: dict[tuple[str, str], int] = {}
+    items = 0
+    titled = False
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.expandtabs(4).rstrip()
+        if not line.strip():
+            continue
+        where = f"{MINDMAP_FILE} 第 {n} 行"
+        if not items and not titled:
+            m = TITLE_RE.match(line)
+            if m:
+                root["text"], titled = m.group(1), True
+                continue
+        m = MM_ITEM_RE.match(line)
+        if not m:
+            issues.warn(where, "不是列表项，已忽略（每个节点写成一行「- 文字」，用缩进表示层级）")
+            continue
+        items += 1
+        indent, body = len(m.group(1)), m.group(2)
+        while stack[-1][0] >= indent:
+            stack.pop()
+        parent, ctx = stack[-1][1], stack[-1][2]
+        node: dict = {}
+        ref = MM_REF_RE.search(body)
+        if ref and (ref.group(1) or ref.group(2)):
+            label, page_id, point_id = body[: ref.start()].strip(), ref.group(1) or ctx, ref.group(2)
+            pg = by_page.get(page_id) if page_id else None
+            fallback = ref.group(0).strip()
+            if not page_id:
+                issues.warn(where, f"{fallback} 找不到所属页面：写在页面节点下面，或写成 {{页面id#{point_id}}}")
+            elif not pg:
+                issues.warn(where, f"页面「{page_id}」不存在")
+            elif point_id is None:
+                node["page"], fallback = page_id, pg["title"]
+            else:
+                pt = next((p for p in pg["points"] if p["id"] == point_id), None)
+                if pt:
+                    node["page"], node["point"], fallback = page_id, point_id, pt["title"]
+                    used[(page_id, point_id)] = used.get((page_id, point_id), 0) + 1
+                else:
+                    issues.warn(where, f"页面「{pg['title']}」没有知识点「{point_id}」")
+            node = {"text": label or fallback, **node}
+        else:
+            node = {"text": body}
+        parent.setdefault("children", []).append(node)
+        stack.append((indent, node, node.get("page") or ctx))
+
+    if not items:
+        issues.warn(MINDMAP_FILE, "思维导图没有内容（每个节点写成一行「- 文字」，用缩进表示层级）")
+        return None
+    for pg in pages:
+        for pt in pg["points"]:
+            times = used.get((pg["id"], pt["id"]), 0)
+            if not times:
+                issues.warn(MINDMAP_FILE, f"知识点「{pg['title']} / {pt['title']}」没有出现在思维导图里")
+            elif times > 1:
+                issues.warn(MINDMAP_FILE, f"知识点「{pg['title']} / {pt['title']}」在思维导图里出现了 {times} 次")
+    return root
+
+
+def count_nodes(node: dict | None) -> int:
+    return 1 + sum(count_nodes(c) for c in node.get("children", [])) if node else 0
+
+
 def topic_dir(tid: str) -> Path | None:
     if not tid or not ID_RE.match(tid) or tid.startswith(("_", ".")):
         return None
@@ -369,6 +445,10 @@ def load_topic(tdir: Path) -> dict:
     if not pages:
         issues.warn("pages", "还没有页面（在 pages/ 下新建 01-xxx 文件夹）")
 
+    mfile = tdir / MINDMAP_FILE
+    name = str(meta.get("name") or tdir.name)
+    mindmap = parse_mindmap(read_text(mfile), name, pages, issues) if mfile.is_file() else None
+
     for page in pages:
         nf = note_file(tdir.name, page["id"])
         page["noteSize"] = nf.stat().st_size if nf.is_file() else 0
@@ -381,7 +461,7 @@ def load_topic(tdir: Path) -> dict:
 
     return {
         "id": tdir.name,
-        "name": str(meta.get("name") or tdir.name),
+        "name": name,
         "kind": str(meta.get("kind") or "").strip(),
         "origin": str(meta.get("origin") or meta.get("company") or ""),  # company 是旧字段名
         "description": str(meta.get("description") or ""),
@@ -390,6 +470,7 @@ def load_topic(tdir: Path) -> dict:
         "sourceFile": sfile.name if sfile else None,
         "path": f"{TOPICS_REL}/{tdir.name}",
         "pages": pages,
+        "mindmap": mindmap,
         "issues": issues.items,
     }
 
@@ -1478,6 +1559,8 @@ def run_outline() -> int:
         if p["description"]:
             print(f"  说明：{p['description']}")
         print(f"  来源：{p['path']}/{p['sourceFile']}" if p["source"] else "  来源：无")
+        mm = p["mindmap"]
+        print(f"  思维导图：{p['path']}/{MINDMAP_FILE}（{count_nodes(mm) - 1} 个节点）" if mm else "  思维导图：无")
         for pg in p["pages"]:
             counts: dict[str, int] = {}
             for q in pg["questions"]:

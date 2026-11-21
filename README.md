@@ -10,6 +10,7 @@ A local study and review website. It runs on your own computer with no account o
 Content is organised into **topics**. A topic is one learning track built from one or more sources: a job description, a book, the slides or syllabus of a course, an exam outline, or a list of goals you write yourself.
 
 - **Knowledge pages**: each topic is split into pages of knowledge points, with tables, code highlighting and formulas.
+- **Mind map** (思维导图, in the sidebar under 总览): a collapsible map of the whole topic — theme groups, pages, knowledge points and the key details of each point — with every page and point coloured by how well you know it. Click a node to expand it; its arrow opens the full text. Narrow screens get an indented outline instead (switchable with 导图 / 大纲). The map is written in the topic's `mindmap.md`.
 - **Quizzes**: every page has multiple-choice questions covering all of its points, and every answer is recorded. Choose “不会” (I don't know) to record an incorrect answer and avoid lucky guesses inflating your mastery.
 - **Mistake review** (错题复习): all questions ranked by recent error rate. Recent and repeated mistakes come first, unanswered questions sit in the middle, and questions you always get right go last. The ⓘ button on the review page shows the formula.
 - **Notes** (笔记): a Markdown notes panel on every page, saved as `.md` files you can also open in any editor.
@@ -54,7 +55,7 @@ The phone and the computer must be on the same Wi-Fi. School and café networks 
 
 ### Add a topic with an AI agent
 
-`AGENTS.md` guides a coding agent through turning a source into knowledge points and questions: planning, overlap analysis, file formats, question quality and validation. Ask your coding agent to read it first, then provide the source.
+`AGENTS.md` guides a coding agent through turning a source into knowledge points, questions and a mind map: planning, overlap analysis, file formats, question quality and validation. Ask your coding agent to read it first, then provide the source.
 
 1. Open this folder in your agent and start a new session.
 2. Send the source, for example:
@@ -73,7 +74,7 @@ The phone and the computer must be on the same Wi-Fi. School and café networks 
    (attach the slides, or paste the syllabus)
    ```
 
-   You can also mention the level or purpose (interview, exam, self-study), the areas to focus on, or that you want the content in English.
+   You can also mention the level or purpose (interview, exam, self-study), the areas to focus on, or that you want the content in English. To add a mind map to a topic that does not have one yet: `Follow AGENTS.md and write the mind map for the topic (topic name)`.
 3. The agent compares the source with the topics already here. If a similar topic exists (a related role, another edition of the same book, the same course), it shows you the overlap and asks whether to merge into that topic or create a new one. If you already know where the content should go, say so in the request and it will not ask.
 4. Refresh the browser to see the new pages.
 
@@ -120,6 +121,7 @@ python server.py --port 9000  Use a different port
 内容按**专题**组织。一个专题是一条学习路线，由一份或几份来源生成：一个岗位的 JD、一本书、一门课的课件或大纲、一份考试大纲，或者你自己列的学习目标。
 
 - **知识点**：每个专题分成若干页面，每页若干知识点，支持表格、代码高亮和公式。
+- **思维导图**（侧栏「总览」下面）：整个专题画成一张可折叠的导图——分组、页面、知识点，以及每个知识点的要点，页面和知识点按掌握情况着色。点节点展开或收起，节点上的箭头打开正文。窄屏显示成缩进的大纲（可用「导图 / 大纲」切换）。内容写在专题的 `mindmap.md` 里。
 - **选择题**：每页的题目覆盖本页全部知识点，每次作答都会记录。选择「不会」按答错记录，避免蒙对影响掌握度。
 - **错题复习**：全部题目按近期错误率排序。最近错的、反复错的排在最前，没做过的在中间，一直答对的在最后。复习页的 ⓘ 按钮里有排序公式。
 - **笔记**：每页一个 Markdown 笔记面板，自动保存成 `.md` 文件，也可以用任何编辑器打开。
@@ -164,7 +166,7 @@ App 会在打开时、回到 App 时、离开 App 前，以及有没同步的改
 
 ### 让 AI agent 生成专题
 
-`AGENTS.md` 可以指导 coding agent 把一份来源变成知识点和题目，包含规划、重叠分析、文件格式、出题标准和校验流程。让 coding agent 先读取这个文件，再把来源发给它即可。
+`AGENTS.md` 可以指导 coding agent 把一份来源变成知识点、题目和思维导图，包含规划、重叠分析、文件格式、出题标准和校验流程。让 coding agent 先读取这个文件，再把来源发给它即可。
 
 1. 用 agent 打开这个文件夹，新开一个会话。
 2. 把来源发给它，例如：
@@ -183,7 +185,7 @@ App 会在打开时、回到 App 时、离开 App 前，以及有没同步的改
    （附上课件文件，或粘贴课程大纲）
    ```
 
-   还可以补充级别或目的（面试、考试、自学）、想侧重的方向，或者要英文内容。
+   还可以补充级别或目的（面试、考试、自学）、想侧重的方向，或者要英文内容。给还没有思维导图的专题补上：`按 AGENTS.md 给专题（专题名）写思维导图`。
 3. agent 会先和已有专题比对。发现同类专题（相近的岗位、同一本书的另一个版本、同一门课）时，它会把重叠情况告诉你，由你决定合并进去还是新建一个专题；如果你一开始就说明了放在哪里，它不会再问。
 4. 完成后刷新浏览器即可看到新页面。
 

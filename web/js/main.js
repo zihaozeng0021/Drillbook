@@ -3,6 +3,7 @@
 //   #/p/<专题>                  专题总览（p 是固定前缀，内容里的站内链接依赖它）
 //   #/p/<专题>/page/<页面>      知识点（?kp=<知识点> 定位到该知识点；?edit=1 编辑本页的 knowledge.md）
 //   #/p/<专题>/page/<页面>/quiz 本页练习
+//   #/p/<专题>/map              思维导图（?page=<页面>&kp=<知识点> 展开并定位到该节点）
 //   #/p/<专题>/review           错题复习
 
 import { h, icon, initTooltip, hideTip } from './ui.js';
@@ -12,6 +13,7 @@ import { renderHome } from './views/home.js';
 import { renderOverview } from './views/overview.js';
 import { renderPage } from './views/page.js';
 import { renderReview } from './views/review.js';
+import { renderMindmap } from './views/mindmap.js';
 import { startAutoSync } from './autosync.js';
 
 const app = document.getElementById('app');
@@ -70,6 +72,8 @@ async function route() {
       tab = seg[4] === 'quiz' ? 'quiz' : 'learn';
     } else if (seg[2] === 'review') {
       name = 'review';
+    } else if (seg[2] === 'map') {
+      name = 'map';
     }
 
     shell.setActive(name, pageId);
@@ -79,6 +83,7 @@ async function route() {
 
     if (name === 'overview') view = renderOverview(main, topic);
     else if (name === 'page') view = renderPage(main, topic, pageId, tab, params, shell);
+    else if (name === 'map') view = renderMindmap(main, topic, params);
     else view = renderReview(main, topic, params);
   } catch (err) {
     if (token !== routeToken) return;

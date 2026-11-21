@@ -102,6 +102,51 @@ select {
   outline-offset: 2px;
 }
 
+/* 滚动条：细、圆角、轨道透明，颜色跟深色底一致；拖动时用操作色。
+   只在鼠标 / 触控板设备上自定义，触屏保留系统自动隐藏的滚动条 */
+@media (hover: hover) and (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    min-height: 40px;
+    min-width: 40px;
+    border: 3px solid transparent;
+    border-radius: 6px;
+    background-color: rgba(154, 171, 197, 0.24);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    border-width: 2px;
+    background-color: rgba(154, 171, 197, 0.4);
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    border-width: 2px;
+    background-color: rgba(142, 197, 255, 0.55);
+  }
+
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+}
+
+/* 不支持 ::-webkit-scrollbar 的浏览器（Firefox）用标准属性 */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(154, 171, 197, 0.32) transparent;
+  }
+}
+
 .num {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
@@ -3336,4 +3381,463 @@ button.rrow:hover {
   color: var(--text-3);
   font-size: 12.5px;
   line-height: 1.7;
+}
+
+/* ── 思维导图 ─────────────────────────────────────────────────────────── */
+
+.mm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 16px;
+}
+
+.mm-head h1 {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.mm-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.mm-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.mm-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  background: var(--bg-deep);
+  color: var(--text-3);
+  cursor: text;
+  transition: border-color 0.12s;
+}
+
+.mm-search:focus-within {
+  border-color: rgba(142, 197, 255, 0.45);
+}
+
+.mm-search .ico {
+  width: 14px;
+  height: 14px;
+}
+
+.mm-search input {
+  width: 140px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.mm-hits {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mm-hits:empty {
+  display: none;
+}
+
+/* 导图：填满窗口，在面板里上下左右滚动 */
+.mindmap.map {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 68px);
+}
+
+.main:has(> .mindmap.map) {
+  padding-bottom: 24px;
+}
+
+.mindmap.map .mm-view {
+  flex: 1;
+  min-height: 320px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  cursor: grab;
+}
+
+.mm-view.panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.mm-canvas {
+  position: relative;
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  padding: 36px 56px 36px 40px;
+}
+
+.mm-tree {
+  position: relative;
+  margin: auto 0; /* 比视野矮时上下居中，比视野高时从顶部开始 */
+}
+
+.mm-links {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.mm-link {
+  fill: none;
+  stroke: var(--new-line);
+  stroke-width: 1.25;
+}
+
+.mm-link.l0 {
+  stroke-width: 2.2;
+}
+
+.mm-link.l1 {
+  stroke-width: 1.7;
+}
+
+.mindmap.map .mm-node {
+  display: flex;
+  align-items: center;
+}
+
+.mindmap.map .mm-kids {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding-left: 44px;
+}
+
+.mindmap.map .k-root > .mm-kids {
+  gap: 22px;
+  padding-left: 56px;
+}
+
+.mindmap.map .k-group > .mm-kids {
+  gap: 10px;
+}
+
+.mindmap.map .k-page > .mm-kids {
+  gap: 6px;
+}
+
+.mm-node.closed > .mm-kids {
+  display: none;
+}
+
+.mm-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 320px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: default;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
+}
+
+.mm-label.fold {
+  cursor: pointer;
+}
+
+.mm-label.fold:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.mm-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mm-main:focus-visible {
+  outline: none;
+}
+
+.mm-label:has(> .mm-main:focus-visible) {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.mm-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mm-text code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(142, 197, 255, 0.09);
+  color: var(--signal-2);
+  font-family: var(--font-code);
+  font-size: 0.88em;
+}
+
+.mm-text a {
+  color: var(--signal);
+}
+
+.k-root > .mm-label {
+  max-width: 260px;
+  padding: 9px 16px;
+  border-color: var(--line-2);
+  background: var(--panel-3);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.k-group > .mm-label {
+  padding: 5px 12px;
+  border-color: var(--line-2);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.k-page > .mm-label {
+  max-width: 320px;
+  padding: 4px 10px;
+  border-color: var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.k-root > .mm-label.fold:hover,
+.k-group > .mm-label.fold:hover,
+.k-page > .mm-label.fold:hover {
+  border-color: var(--line-2);
+  background: var(--panel-3);
+}
+
+.k-point > .mm-label {
+  max-width: 270px;
+  padding: 3px 8px;
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+.mm-no {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.mm-label .dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.mm-state {
+  display: inline-flex;
+  flex: none;
+}
+
+.mm-state:empty {
+  display: none;
+}
+
+.mm-state .mbar {
+  width: 28px;
+}
+
+.mm-fold {
+  display: none;
+  flex: none;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--panel-3);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.mm-node.closed > .mm-label .mm-fold {
+  display: inline-block;
+}
+
+.mm-go {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -2px -4px -2px 0;
+  border-radius: 5px;
+  color: var(--text-3);
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.mm-go:hover {
+  background: var(--signal-a);
+  color: var(--signal);
+}
+
+.mm-go .ico {
+  width: 13px;
+  height: 13px;
+}
+
+.mm-tree.searching .mm-label:not(.hit, .trail) {
+  opacity: 0.42;
+}
+
+.mm-label.hit {
+  border-color: rgba(142, 197, 255, 0.45);
+}
+
+.mm-label.cur {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 1px var(--signal);
+}
+
+@keyframes mm-flash {
+  0%,
+  35% {
+    box-shadow: 0 0 0 2px var(--signal), 0 0 16px rgba(142, 197, 255, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 2px rgba(142, 197, 255, 0);
+  }
+}
+
+.mm-label.flash {
+  animation: mm-flash 1.8s ease-out;
+}
+
+/* 大纲：缩进的树，随页面滚动；连线用边框画 */
+.mindmap.outline .mm-canvas {
+  display: block;
+  width: auto;
+  padding: 18px 18px 22px;
+}
+
+.mindmap.outline .mm-tree {
+  margin: 0;
+}
+
+.mindmap.outline .mm-links {
+  display: none;
+}
+
+.mindmap.outline .mm-label {
+  max-width: 100%;
+}
+
+.mindmap.outline .mm-kids {
+  margin-left: 12px;
+}
+
+.mindmap.outline .mm-kids > .mm-node {
+  --mid: 12.4px; /* 节点第一行的中线到节点顶部的距离，连线的拐角对准它 */
+  position: relative;
+  padding: 2px 0 2px 20px;
+}
+
+.mindmap.outline .mm-kids > .k-group {
+  --mid: 16.5px;
+  margin-top: 8px;
+}
+
+.mindmap.outline .mm-kids > .k-page {
+  --mid: 15.2px;
+}
+
+.mindmap.outline .mm-kids > .k-point {
+  --mid: 13.8px;
+}
+
+.mindmap.outline .mm-kids > .mm-node::before,
+.mindmap.outline .mm-kids > .mm-node::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  border: 0 solid var(--new-line);
+}
+
+.mindmap.outline .mm-kids > .mm-node::before {
+  top: 0;
+  bottom: 0;
+  border-left-width: 1px;
+}
+
+.mindmap.outline .mm-kids > .mm-node:last-child::before {
+  bottom: auto;
+  height: calc(2px + var(--mid));
+}
+
+.mindmap.outline .mm-kids > .mm-node::after {
+  top: calc(2px + var(--mid));
+  width: 14px;
+  border-top-width: 1px;
+}
+
+@media (max-width: 900px) {
+  .mindmap.map {
+    height: calc(100vh - 96px);
+    height: calc(100dvh - 96px);
+  }
+
+  .main:has(> .mindmap.map) {
+    padding-bottom: 16px;
+  }
+
+  .mm-head h1 {
+    font-size: 22px;
+  }
+
+  .mm-tools {
+    width: 100%;
+  }
+
+  .mm-search {
+    flex: 1 1 140px;
+  }
+
+  .mm-search input {
+    width: 100%;
+  }
+
+  .mindmap.outline .mm-canvas {
+    padding: 14px 12px 18px;
+  }
 }

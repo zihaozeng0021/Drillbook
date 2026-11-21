@@ -1,4 +1,4 @@
-// 专题内的外框：左侧导航（页面列表 + 错题复习），右侧内容区
+// 专题内的外框：左侧导航（总览、思维导图、页面列表、错题复习），右侧内容区
 
 import { h, icon, logo, stateBar, kindLabel } from '../ui.js';
 import * as store from '../store.js';
@@ -64,8 +64,18 @@ export class Shell {
         icon('grid'),
         h('span', { class: 't' }, '总览'),
       ),
-      h('div', { class: 'nav-sep' }),
     ];
+    if (topic.mindmap) {
+      items.push(
+        h(
+          'a',
+          { class: `nav-item${name === 'map' ? ' active' : ''}`, href: `${base}/map` },
+          icon('map'),
+          h('span', { class: 't' }, '思维导图'),
+        ),
+      );
+    }
+    items.push(h('div', { class: 'nav-sep' }));
     for (const page of topic.pages) {
       const c = store.counts(topic, page.questions);
       items.push(

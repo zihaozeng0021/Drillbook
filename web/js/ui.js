@@ -40,6 +40,9 @@ const ICONS = {
   edit: '<path d="M7 3.5h7l4.5 4.5v12.5h-11.5z"/><path d="M14 3.5v4.5h4.5"/><path d="M9.5 13h5M9.5 16.5h5"/>',
   phone: '<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 17.5h2"/>',
   download: '<path d="M12 4.5v10.5M7.5 10.5l4.5 4.5 4.5-4.5"/><path d="M5 19.5h14"/>',
+  map: '<circle cx="5.5" cy="12" r="2.5"/><path d="M8 12h3.5M11.5 12c0-4.3 1.5-6.5 4.5-6.5h4M11.5 12c0 4.3 1.5 6.5 4.5 6.5h4M11.5 12h8.5"/>',
+  open: '<path d="M9.5 6.5h8v8"/><path d="M17.5 6.5L7 17"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L20 20"/>',
 };
 
 export function icon(name, cls = '') {
