@@ -1,22 +1,22 @@
-// 拖动排序：列表里的每一项都能拖到新的位置。
-// · 鼠标：按住一项移动几像素就开始拖；只是点一下照常打开链接
-// · 触屏：按住一项不动约 0.35 秒后开始拖；直接滑动照常滚动页面
-// · 键盘：焦点在某一项上时按 Alt + ↑ / ↓ 上下移动它
-// 拖动时其他项让出位置，拖到窗口上下边缘附近会自动滚动，按 Esc 取消。
-// 顺序变了就调用 onSort(按新顺序排列的各项)；每次拖完（顺序变没变都算）再调用 onEnd()
+// Drag sorting: every item in the list can be dragged to a new position.
+// · Mouse: press an item and move a few pixels to start dragging; a plain click opens the link as usual
+// · Touch: press and hold an item still for about 0.35 s to start dragging; a plain swipe scrolls the page as usual
+// · Keyboard: with focus on an item, press Alt + ↑ / ↓ to move it up or down
+// While dragging, the other items make room, dragging near the top or bottom edge of the window scrolls automatically, and Esc cancels.
+// When the order changes it calls onSort(the items in their new order); after every drag (whether or not the order changed) it calls onEnd()
 
 import { hideTip } from './ui.js';
 
-const MOUSE_SLOP = 5; // 鼠标按下后移动超过这么多像素才算拖动
-const TOUCH_DELAY = 350; // 触屏按住这么久（毫秒）开始拖动
-const TOUCH_SLOP = 8; // 按住期间手指移动超过这么多像素就是在滚动页面，不拖
-const EDGE = 64; // 拖到离窗口上下边缘这么近时自动滚动
-const SETTLE = 180; // 松手后滑到新位置的时间（毫秒），与 CSS 里的一致
+const MOUSE_SLOP = 5; // after the mouse button goes down, it only counts as a drag once it moves more than this many pixels
+const TOUCH_DELAY = 350; // on touch screens, holding this long (ms) starts a drag
+const TOUCH_SLOP = 8; // if the finger moves more than this many pixels while holding, it's scrolling the page, not a drag
+const EDGE = 64; // scroll automatically when dragged this close to the top or bottom edge of the window
+const SETTLE = 180; // time (ms) to slide into the new position after release; matches the CSS
 
 export function sortable(list, { item, onSort, onEnd }) {
-  let press = null; // 按下了、还没开始拖
-  let drag = null; // 正在拖
-  let unblock = null; // 拖完之后拦下浏览器补发的那次点击
+  let press = null; // pressed, not dragging yet
+  let drag = null; // dragging
+  let unblock = null; // after a drag, blocks the extra click the browser fires
 
   const itemsOf = () => [...list.children].filter((el) => el.matches(item));
 
@@ -29,7 +29,7 @@ export function sortable(list, { item, onSort, onEnd }) {
     window[m]('scroll', onScroll, { capture: true, passive: true });
   }
 
-  // 拖动时用滚轮滚动页面：拖着的那项留在指针下面
+  // Scrolling the page with the wheel while dragging: the dragged item stays under the pointer
   function onScroll() {
     if (drag) layout();
   }
@@ -48,7 +48,7 @@ export function sortable(list, { item, onSort, onEnd }) {
   function onMove(e) {
     if (drag) {
       if (e.pointerId !== drag.id) return;
-      if (!drag.touch && !e.buttons) return finish(false); // 鼠标在窗口外松开了
+      if (!drag.touch && !e.buttons) return finish(false); // the mouse button was released outside the window
       drag.y = e.clientY;
       layout();
       return;
@@ -60,7 +60,7 @@ export function sortable(list, { item, onSort, onEnd }) {
       if (far > TOUCH_SLOP) stop();
       else press.y = e.clientY;
     } else if (far > MOUSE_SLOP) {
-      begin(press.y0); // 从按下的地方算起，拖着的那项正好跟在指针下面
+      begin(press.y0); // measured from where it was pressed, so the dragged item stays right under the pointer
       drag.y = e.clientY;
       layout();
     }
@@ -106,11 +106,11 @@ export function sortable(list, { item, onSort, onEnd }) {
       all,
       from,
       to: from,
-      mids: rects.map((q) => q.top + sy + q.height / 2), // 各项原来的中线（文档坐标）
+      mids: rects.map((q) => q.top + sy + q.height / 2), // each item's original midline (document coordinates)
       top: r.top + sy,
       bottom: r.bottom + sy,
-      shift: r.height + Math.max(0, rects[1].top - rects[0].bottom), // 别项让位时移动的距离：这一项的高度加间距
-      min: box.top - r.top, // 只在列表范围内移动
+      shift: r.height + Math.max(0, rects[1].top - rects[0].bottom), // how far the other items move to make room: this item's height plus the gap
+      min: box.top - r.top, // move only within the list
       max: box.bottom - r.bottom,
       y0: y + sy,
       y,
@@ -124,7 +124,8 @@ export function sortable(list, { item, onSort, onEnd }) {
     drag.raf = requestAnimationFrame(autoScroll);
   }
 
-  // 拖着的那项跟着指针走；往下拖时它的下边越过哪一项的中线，那一项就往上让位，往上拖看它的上边
+  // The dragged item follows the pointer; when dragging down, any item whose midline its bottom edge crosses moves up
+  // to make room; when dragging up, its top edge is what counts
   function layout() {
     const d = drag;
     const dy = Math.max(d.min, Math.min(d.max, d.y + window.scrollY - d.y0));
@@ -161,7 +162,7 @@ export function sortable(list, { item, onSort, onEnd }) {
     blockClick(d.touch);
     const to = cancel ? d.from : d.to;
     const seen = d.el.getBoundingClientRect().top;
-    // 先去掉让位的动画再复位：让位的各项此刻已经在它们的新位置上，复位后看不出跳动
+    // Turn off the make-room animation before resetting: the items that made room are already at their new positions, so the reset shows no jump
     list.classList.remove('sorting');
     for (const n of d.all) n.style.transform = '';
     if (to !== d.from) {
@@ -169,7 +170,7 @@ export function sortable(list, { item, onSort, onEnd }) {
       if (to < rest.length) rest[to].before(d.el);
       else rest[rest.length - 1].after(d.el);
     }
-    // 拖着的那项从松手的地方滑到新位置
+    // The dragged item slides from where it was released to its new position
     d.el.style.transform = `translate3d(0, ${seen - d.el.getBoundingClientRect().top}px, 0)`;
     d.el.getBoundingClientRect();
     d.el.classList.add('settling');
@@ -180,7 +181,7 @@ export function sortable(list, { item, onSort, onEnd }) {
     onEnd?.();
   }
 
-  // 拖完松手时浏览器还会补发一次点击（触屏上会晚一点）：拦下，免得打开了这一项的链接
+  // On release after a drag the browser still fires a click (a little later on touch screens): block it so the item's link doesn't open
   function blockClick(touch) {
     unblock?.();
     const swallow = (e) => {
@@ -208,18 +209,18 @@ export function sortable(list, { item, onSort, onEnd }) {
     if (to < 0 || to >= all.length) return;
     if (to < from) all[to].before(el);
     else all[to].after(el);
-    el.focus(); // 移动元素会让它失去焦点
+    el.focus(); // moving the element makes it lose focus
     onSort?.(itemsOf());
     onEnd?.();
   }
 
   list.addEventListener('pointerdown', onDown);
   list.addEventListener('keydown', onKey);
-  // 拖动时不让页面跟着手指滚动；必须是非被动的监听才能阻止滚动
+  // Keep the page from scrolling with the finger while dragging; only a non-passive listener can prevent scrolling
   list.addEventListener('touchmove', (e) => drag?.touch && e.cancelable && e.preventDefault(), { passive: false });
-  // 触屏长按时浏览器会弹出链接菜单
+  // On a long press on touch screens the browser would pop up the link menu
   list.addEventListener('contextmenu', (e) => (press?.touch || drag?.touch) && e.preventDefault());
-  // 链接自带的拖拽（把网址拖出去）
+  // Links' built-in drag (dragging the URL out)
   list.addEventListener('dragstart', (e) => e.target.closest?.(item) && e.preventDefault());
 
   return {

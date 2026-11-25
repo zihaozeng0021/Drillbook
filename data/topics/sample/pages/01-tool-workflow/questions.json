@@ -2,118 +2,118 @@
   {
     "id": "q01",
     "points": ["task-contract"],
-    "stem": "为「整理本周会议待办」设计 Agent 时，哪种完成条件最便于验证业务目标？",
+    "stem": "When designing an agent to \"compile this week's meeting action items\", which completion criterion makes the business goal easiest to verify?",
     "options": [
-      "每轮至少调用一次搜索工具，直到累计完成五轮交互",
-      "生成一段流畅的总结，并在末尾说明任务已经完成",
-      "待办覆盖指定会议范围，标注原文位置并显式保留未知字段",
-      "输出的待办数量达到固定阈值，负责人和日期均由模型补齐"
+      "At least one search tool call per turn, until five turns have been completed in total",
+      "A fluent summary that ends by stating that the task is complete",
+      "Action items that cover the specified meetings, cite source locations and explicitly keep unknown fields as unknown",
+      "A fixed minimum number of action items, with all owners and dates filled in by the model"
     ],
     "answer": "C",
-    "explanation": "覆盖范围、原文位置和未知字段都可以检查，能反映待办是否可靠。调用轮数只能说明执行过步骤，流畅表述和完成声明不能证明成功；固定数量与自行补齐信息还可能让模型编造任务。"
+    "explanation": "Coverage, source locations and unknown fields can all be checked, and together they show whether the action items are reliable. The number of call rounds only shows that steps were executed, and fluent wording or a claim of completion does not prove success; a fixed quantity and self-filled information may even lead the model to invent tasks."
   },
   {
     "id": "q02",
     "points": ["task-contract"],
-    "stem": "用户要求整理「本周会议」，却未提供可访问的会议记录。Agent 最合适的下一步是什么？",
+    "stem": "A user asks the agent to organize \"this week's meetings\" but does not provide any accessible meeting notes. What is the most appropriate next step for the agent?",
     "options": [
-      "说明缺失的输入，请用户提供记录或指定可访问的数据来源",
-      "先按常见团队会议模板生成待办，再补上可能的负责人",
-      "用相同的空查询反复搜索，直到工具返回足够数量的文档",
-      "直接输出空列表，并将它标记为全部会议均无待办"
+      "Explain which input is missing and ask the user to provide the notes or name an accessible data source",
+      "Generate action items from a typical team-meeting template first, then add likely owners",
+      "Repeat the same empty query until the search tool returns enough documents",
+      "Output an empty list right away and mark it as meaning that no meeting had any action items"
     ],
     "answer": "A",
-    "explanation": "缺少必要输入时先澄清来源，才能区分没有数据与确实没有待办。按模板补写会制造事实，重复空查询不能弥补输入缺失；空列表也不应被当成已检查所有会议后的结论。"
+    "explanation": "When a required input is missing, clarifying the source first is the only way to tell \"no data\" apart from \"genuinely no action items\". Filling things in from a template fabricates facts, and repeating an empty query cannot make up for missing input; nor should an empty list be presented as the conclusion of having checked every meeting."
   },
   {
     "id": "q03",
     "points": ["task-contract"],
-    "stem": "为一个文档整理 Agent 编写任务契约时，哪些内容适合作为可检查的约束？",
+    "stem": "When writing a task contract for a document-organizing agent, which of the following are suitable as checkable constraints?",
     "options": [
-      "模型认为结果足够可信时，可以把缺失字段补成合理值",
-      "每个整理结果保留文档标识和原文位置，便于人工核对",
-      "只要模型使用了「已完成」措辞，就将本次任务判为成功",
-      "达到步数或时限后停止继续调用，并报告已完成与未完成部分"
+      "When the model considers the result credible enough, it may fill in missing fields with plausible values",
+      "Each organized result keeps the document ID and the source location so that a person can verify it",
+      "As soon as the model uses the word \"done\", the task is judged a success",
+      "After reaching the step or time limit, the agent stops making calls and reports what has and has not been completed"
     ],
     "answer": "BD",
-    "explanation": "来源定位便于核对结果，退出条件让执行预算和剩余工作可检查。模型的自信或完成声明都不是独立证据；缺失字段应标明未知，不能为了让结果完整而用合理猜测替代事实。"
+    "explanation": "Source locations make results easy to verify, and an exit condition makes the execution budget and the remaining work checkable. Neither the model's confidence nor its claim of completion is independent evidence; missing fields should be marked unknown, not replaced with plausible guesses just to make the result look complete."
   },
   {
     "id": "q04",
     "points": ["tool-contract"],
-    "stem": "搜索工具要求 `query` 为非空字符串，`limit` 为 1 到 10 的整数，两者均必填。下面哪组参数符合这些结构约束？",
+    "stem": "A search tool requires `query` to be a non-empty string and `limit` to be an integer from 1 to 10, and both are required. Which set of parameters satisfies these structural constraints?",
     "options": [
-      "`{\"query\": \"会议\", \"limit\": \"3\"}`",
+      "`{\"query\": \"meeting\", \"limit\": \"3\"}`",
       "`{\"limit\": 3}`",
-      "`{\"query\": \"会议\", \"limit\": 30}`",
-      "`{\"query\": \"会议\", \"limit\": 3}`"
+      "`{\"query\": \"meeting\", \"limit\": 30}`",
+      "`{\"query\": \"meeting\", \"limit\": 3}`"
     ],
     "answer": "D",
-    "explanation": "查询文本非空且数量为范围内的整数，才同时满足这些要求。字符串形式的数字仍然是字符串；省略查询文本违反必填约束，数量超出范围也不合法。结构合法之后仍需检查业务含义。"
+    "explanation": "Only a non-empty query text together with an integer count inside the range meets all of these requirements. A number written as a string is still a string; omitting the query text violates the required constraint, and a count outside the range is invalid as well. Even once the structure is valid, the business meaning still has to be checked."
   },
   {
     "id": "q05",
     "points": ["tool-contract"],
-    "stem": "模型生成了一条格式正确的「创建待办」工具调用请求，但应用程序还未执行工具。此时哪种状态描述最准确？",
+    "stem": "The model has generated a well-formed \"create action item\" tool call request, but the application has not executed the tool yet. Which description of the current state is most accurate?",
     "options": [
-      "待办已经创建，可以把模型生成的参数直接当成成功回执",
-      "模型提出了操作请求，应用还需校验、执行并读取真实结果",
-      "参数符合格式就足以证明待办内容、负责人和日期都正确",
-      "调用请求被生成后，后端会自行完成业务操作，无需应用处理"
+      "The action item has been created, and the parameters the model generated can be treated as a success receipt",
+      "The model has requested an operation; the application still has to validate it, execute it and read the actual result",
+      "Well-formed parameters are enough to prove that the action item's content, owner and date are all correct",
+      "Once the call request is generated, the backend completes the business operation on its own, with no handling by the application"
     ],
     "answer": "B",
-    "explanation": "工具调用请求是模型建议执行的操作，实际执行由应用与工具完成，成功与否要看真实结果。参数结构不能证明业务事实正确，也不会自动修改外部状态；把请求当回执会导致错误报告完成。"
+    "explanation": "A tool call request is an operation the model proposes; the actual execution is done by the application and the tool, and success depends on the real result. A parameter structure cannot prove that the business facts are right, and it does not change external state by itself; treating the request as a receipt leads to falsely reporting completion."
   },
   {
     "id": "q06",
     "points": ["tool-contract"],
-    "stem": "应用按 JSON Schema 校验工具参数时，结构校验能够直接发现哪些问题？",
+    "stem": "When the application validates tool parameters against a JSON Schema, which problems can structural validation catch directly?",
     "options": [
-      "`limit` 声明为整数，模型却传入了字符串",
-      "查询文本语义清晰，但检索结果没有真正回答用户的问题",
-      "`required` 声明的字段缺失，调用请求只包含部分参数",
-      "调用参数全部合法，但远端服务保存结果时发生了故障"
+      "`limit` is declared as an integer, but the model passed in a string",
+      "The query text is semantically clear, but the search results do not actually answer the user's question",
+      "A field declared in `required` is missing, so the call request contains only some of the parameters",
+      "All call parameters are valid, but the remote service failed while saving the result"
     ],
     "answer": "AC",
-    "explanation": "类型不匹配和必填字段缺失都属于结构层面的错误，可以在执行前拦截。检索结果是否回答问题需要业务或内容评估，远端保存故障则需要执行回执或状态查询，不能靠参数 Schema 判断。"
+    "explanation": "A type mismatch and a missing required field are both structural errors and can be intercepted before execution. Whether the search results answer the question needs a business or content evaluation, and a remote save failure needs an execution receipt or a status query; neither can be judged from the parameter schema."
   },
   {
     "id": "q07",
     "points": ["retry-idempotency"],
-    "stem": "创建待办的请求超时，服务端可能已经保存成功。为了在重试时避免重复创建，哪种设计最合适？",
+    "stem": "A request to create an action item timed out, and the server may already have saved it successfully. Which design is best for avoiding a duplicate when retrying?",
     "options": [
-      "同一逻辑操作使用稳定的幂等键，服务端识别重复请求并复用结果",
-      "每次重试生成新的请求标识，让服务端把每次请求分别处理",
-      "固定等待更长时间后再次创建，用延迟代替重复请求识别",
-      "在提示词中要求模型不要重复创建，服务端继续接受所有请求"
+      "Use a stable idempotency key for the same logical operation, so the server recognizes repeated requests and reuses the result",
+      "Generate a new request ID for each retry, so the server handles every request separately",
+      "Wait a fixed, longer time before creating it again, using delay instead of duplicate-request detection",
+      "Tell the model in the prompt not to create duplicates, while the server keeps accepting every request"
     ],
     "answer": "A",
-    "explanation": "稳定的操作标识配合服务端去重，才能把重试识别为同一件业务操作。每次换标识会被当成新操作；单纯延迟或提示模型克制都无法判断首次请求是否已生效，不能保证不会重复创建。"
+    "explanation": "Only a stable operation ID combined with server-side deduplication lets a retry be recognized as the same business operation. Changing the ID each time makes every attempt look like a new operation; merely waiting or prompting the model to hold back cannot tell whether the first request already took effect, so neither guarantees that no duplicate is created."
   },
   {
     "id": "q08",
     "points": ["retry-idempotency"],
-    "stem": "工具明确返回「参数不合法：截止日期早于开始日期」。在重试预算尚未用尽时，Agent 应优先怎么处理？",
+    "stem": "The tool explicitly returns \"Invalid parameter: the due date is earlier than the start date\". The retry budget is not yet used up. What should the agent do first?",
     "options": [
-      "立即用相同参数重试，直到某次请求被服务端接受",
-      "核对并修正日期参数，必要时向用户澄清后再发起请求",
-      "增加等待时间后继续发送同一组参数，消除临时错误",
-      "更换幂等键重试同样的参数，避免服务端复用旧错误"
+      "Retry immediately with the same parameters until one of the requests is accepted by the server",
+      "Check and correct the date parameters, asking the user for clarification if necessary, before sending the request again",
+      "Wait longer and keep sending the same set of parameters to clear the transient error",
+      "Retry the same parameters with a new idempotency key so the server does not reuse the old error"
     ],
     "answer": "B",
-    "explanation": "明确的参数错误需要修正输入，重试预算不能改变输入本身的有效性。相同错误参数即使等待更久或换幂等键，通常仍会失败。退避更适合临时故障，不是修复日期逻辑的手段。"
+    "explanation": "An explicit parameter error calls for fixing the input; a retry budget cannot change whether the input itself is valid. The same bad parameters will usually still fail, even after a longer wait or with a new idempotency key. Backoff is meant for transient failures; it is not a way to fix date logic."
   },
   {
     "id": "q09",
     "points": ["retry-idempotency"],
-    "stem": "关于具有写入效果的工具调用，哪些做法有助于处理重复请求与状态不明？",
+    "stem": "For tool calls that write data, which practices help handle duplicate requests and unknown states?",
     "options": [
-      "超时后换一个幂等键重新提交，避免关联到上一次调用",
-      "同一幂等键携带不同参数时报告冲突，避免误用旧结果",
-      "只在请求中增加幂等键字段，服务端无需保存或检查该键",
-      "能按操作标识查询状态时，先核实是否成功再决定是否重试"
+      "After a timeout, resubmit with a new idempotency key so the request is not linked to the previous call",
+      "Report a conflict when the same idempotency key arrives with different parameters, so an old result is not misused",
+      "Simply add an idempotency key field to the request, without the server storing or checking the key",
+      "When the status can be queried by operation ID, first confirm whether the operation succeeded before deciding whether to retry"
     ],
     "answer": "BD",
-    "explanation": "校验同键异参可防止误复用结果，先查询状态则有助于确认超时请求是否已经生效。换键可能绕过去重并再次写入；幂等键也必须由服务端实现相应处理，单独增加字段没有保证作用。"
+    "explanation": "Checking for the same key with different parameters prevents reusing a result by mistake, and querying the status first helps confirm whether a timed-out request has already taken effect. Switching keys can bypass deduplication and write again; an idempotency key also needs matching handling implemented on the server, so adding the field alone guarantees nothing."
   }
 ]

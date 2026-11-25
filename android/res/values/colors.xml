@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 与网站 app.css 里的背景色 bg 相同 -->
+    <!-- Same as the background color bg in the site's app.css -->
     <color name="bg">#FF0D1524</color>
 </resources>

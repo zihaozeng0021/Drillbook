@@ -1,4 +1,4 @@
-// DOM 小工具：元素创建、图标、题目方格、提示框、对话框、偏好设置
+// Small DOM helpers: element creation, icons, question cells, tooltips, dialogs, preferences
 
 export function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
@@ -66,8 +66,8 @@ export function kbd(text) {
   return h('span', { class: 'kbd' }, text);
 }
 
-// 专题类型（topic.json 的 kind）：已知类型显示中文，其他原样显示
-export const KIND_LABEL = { job: '岗位', book: '书', course: '课程', exam: '考试' };
+// Topic kind (kind in topic.json): known kinds get an English label, anything else is shown as is
+export const KIND_LABEL = { job: 'Job', book: 'Book', course: 'Course', exam: 'Exam' };
 
 export function kindLabel(kind) {
   const k = String(kind || '').trim();
@@ -79,12 +79,12 @@ export function kindTag(kind) {
   return label ? h('span', { class: 'kind-tag' }, label) : null;
 }
 
-// 题目方格：每道题一个，颜色代表状态
+// Question cell: one per question, its color shows the state
 export function cell(state, tip, extra = {}) {
   return h('span', { class: `cell s-${state}`, 'data-tip': tip || null, ...extra });
 }
 
-// 状态比例条：掌握 / 一般 / 薄弱 / 未做
+// State proportion bar: Mastered / Fair / Weak / New
 export function stateBar(counts) {
   const total = counts.weak + counts.new + counts.fair + counts.good;
   const bar = h('span', { class: 'mbar', 'aria-hidden': 'true' });
@@ -96,30 +96,32 @@ export function stateBar(counts) {
   return bar;
 }
 
-// 最近若干次作答：绿 = 对，红 = 错（含不会），最新的在右边
+// The last few attempts: green = correct, red = wrong (including "Don't know"), newest on the right
 export function historyMarks(attempts, max = 8) {
   const box = h('span', { class: 'hist' });
   for (const a of attempts.slice(-max)) {
-    const label = a.unknown === true ? '不会' : a.ok ? '回答正确' : '回答错误';
+    const label = a.unknown === true ? "Don't know" : a.ok ? 'Correct' : 'Incorrect';
     box.append(h('i', { class: a.ok ? 'o' : 'x', role: 'img', 'aria-label': label, 'data-tip': label }));
   }
   return box;
 }
 
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
 export function relTime(t, now = Date.now()) {
   if (!t) return '';
   const s = (now - t) / 1000;
-  if (s < 60) return '刚刚';
-  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
-  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)} 天前`;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  if (s < 86400 * 30) return `${plural(Math.floor(s / 86400), 'day')} ago`;
   const d = new Date(t);
-  return `${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); // e.g. "Nov 25"
 }
 
 export function plainText(md, max = 80) {
   const s = String(md)
-    .replace(/```[\s\S]*?```/g, ' [代码] ')
+    .replace(/```[\s\S]*?```/g, ' [code] ')
     .replace(/\$\$([\s\S]+?)\$\$/g, '$1')
     .replace(/[`*_>#|]/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -128,7 +130,7 @@ export function plainText(md, max = 80) {
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
 }
 
-// ── 偏好设置（浏览器本地，仅保存界面选项；作答记录在服务端文件里） ──
+// ── Preferences (stored locally in the browser, UI options only; answer records live in the server's files) ──
 export const prefs = {
   get(key, fallback) {
     try {
@@ -142,12 +144,12 @@ export const prefs = {
     try {
       localStorage.setItem(`prep.${key}`, JSON.stringify(value));
     } catch {
-      /* 存储不可用时忽略 */
+      /* ignored when storage is unavailable */
     }
   },
 };
 
-// ── 悬浮提示 ──
+// ── Tooltips ──
 let tipEl = null;
 let tipFor = null;
 
@@ -172,7 +174,7 @@ export function initTooltip() {
     if (e.target.matches?.(':focus-visible')) show(e.target.closest?.('[data-tip]') || null);
   });
   document.addEventListener('focusout', () => show(null));
-  document.addEventListener('pointerdown', hideTip, true); // 点击后界面可能重绘，旧提示不再对应任何元素
+  document.addEventListener('pointerdown', hideTip, true); // a click may re-render the UI, leaving the old tooltip attached to nothing
   window.addEventListener('scroll', hideTip, true);
   window.addEventListener('hashchange', hideTip);
 }
@@ -182,7 +184,7 @@ export function hideTip() {
   if (tipEl) tipEl.hidden = true;
 }
 
-// ── 对话框 ──
+// ── Dialogs ──
 export function modal({ title, body, actions = [], wide = false }) {
   return new Promise((resolve) => {
     const prevFocus = document.activeElement;
@@ -218,12 +220,12 @@ export function modal({ title, body, actions = [], wide = false }) {
   });
 }
 
-export async function confirmDialog({ title, body, confirm = '确定', danger = false }) {
+export async function confirmDialog({ title, body, confirm = 'OK', danger = false }) {
   const v = await modal({
     title,
     body,
     actions: [
-      { label: '取消', value: false },
+      { label: 'Cancel', value: false },
       { label: confirm, value: true, kind: danger ? 'danger' : 'primary' },
     ],
   });

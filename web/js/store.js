@@ -1,5 +1,5 @@
-// 数据层：题库缓存、作答记录、统计。作答记录先写内存，再写入服务端文件；
-// 写入失败的记录暂存在浏览器里，下次成功连接时补写。
+// Data layer: question bank cache, answer records, statistics. Answer records go into memory first, then into the server's files;
+// records that fail to save are kept in the browser for now and written on the next successful connection.
 
 import { api } from './api.js';
 import { APP } from './native.js';
@@ -31,7 +31,7 @@ export async function getTopics(force = false) {
   return topicsCache;
 }
 
-// 专题列表拖动排序后保存（ids：全部专题按新顺序）。连续拖了几次就按先后依次保存，最后一次为准
+// Saves the topic list after drag sorting (ids: all topics in the new order). Several drags in a row are saved one after another; the last one wins
 let orderQueue = Promise.resolve();
 
 export function saveTopicOrder(ids) {
@@ -43,12 +43,12 @@ export function saveTopicOrder(ids) {
   });
 }
 
-// 知识点文件在网页里改过之后调用：下次进入专题时重新读取并解析
+// Call after a knowledge file was edited in the web page: the topic is re-read and re-parsed on the next visit
 export function invalidateTopic(tid) {
   cache.delete(tid);
 }
 
-// 手机 App 同步拿到新题库之后调用：全部重新读取
+// Call after a phone app sync brought in a new question bank: re-read everything
 export function invalidateAll() {
   cache.clear();
   topicsCache = null;
@@ -56,7 +56,7 @@ export function invalidateAll() {
 
 const recordsSig = (list) => `${list.length}:${list.length ? list[list.length - 1].t : 0}`;
 
-// 作答记录在别处变了（手机同步进来、手机 App 同步完）：重新读取已打开专题的记录，页面跟着刷新
+// Answer records changed elsewhere (a phone synced in, or the phone app finished a sync): re-read the records of open topics, and the page refreshes with them
 export async function refreshRecords() {
   for (const topic of [...cache.values()]) {
     const started = Date.now();
@@ -70,7 +70,7 @@ export async function refreshRecords() {
     const pending = readPending(topic.id);
     const sig = recordsSig(list);
     if (sig === topic.recordsSig && !pending.length) continue;
-    // 读取期间刚做的题可能还没写进文件：先留着，重建后补回
+    // Questions answered during the read may not be in the file yet: keep them and add them back after the rebuild
     const recent = [];
     for (const l of topic.attempts.values()) for (const a of l) if (a.t >= started - 2000) recent.push(a);
     topic.recordsSig = sig;
@@ -87,7 +87,7 @@ export async function refreshRecords() {
   }
 }
 
-// 电脑上：回到这个标签页时检查一下，手机同步进来的记录直接显示，不用刷新页面
+// On the computer: check when returning to this tab, so records synced in from the phone show up without reloading the page
 if (!APP && typeof window !== 'undefined') {
   let last = 0;
   window.addEventListener('focus', () => {
@@ -139,7 +139,7 @@ function build(bank, records) {
 }
 
 function addAttempt(topic, r) {
-  if (!topic.qById.has(r.q)) return; // 题目已删除的旧记录：保留在文件里，但不参与统计
+  if (!topic.qById.has(r.q)) return; // old record of a deleted question: kept in the file but left out of the statistics
   let list = topic.attempts.get(r.q);
   if (!list) topic.attempts.set(r.q, (list = []));
   list.push(r);
@@ -151,7 +151,7 @@ export function attemptsOf(topic, gid) {
   return topic.attempts.get(gid) || [];
 }
 
-// 统计结果按「记录版本 + 分钟」缓存：时间衰减变化很慢，没必要每次重算
+// Statistics are cached per "records version + minute": time decay changes slowly, so there's no need to recompute every time
 function memo(topic, key, fn) {
   const minute = Math.floor(Date.now() / 60000);
   const slot = topic[key];
@@ -204,7 +204,7 @@ export async function resetRecords(topic) {
   return res.archived;
 }
 
-// ── 未写入成功的记录 ──
+// ── Records that failed to save ──
 const pendingKey = (tid) => `prep.pending.${tid}`;
 
 function readPending(tid) {
@@ -221,7 +221,7 @@ function writePending(tid, list) {
     if (list.length) localStorage.setItem(pendingKey(tid), JSON.stringify(list));
     else localStorage.removeItem(pendingKey(tid));
   } catch {
-    /* 存储不可用 */
+    /* storage unavailable */
   }
 }
 

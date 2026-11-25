@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 7.x 用的图标（8.0 起用 mipmap-anydpi-v26 里的自适应图标） -->
+<!-- Icon for Android 7.x (8.0 and later use the adaptive icon in mipmap-anydpi-v26) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"

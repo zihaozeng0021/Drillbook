@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Drillbook · 本地服务（只用 Python 标准库，无需安装任何依赖）
+Drillbook · local server (Python standard library only, nothing to install)
 
-用法：
-  python server.py               启动服务并自动打开浏览器
-  python server.py --port 9000   指定端口（默认 8765，被占用时自动顺延）
-  python server.py --no-browser  不自动打开浏览器
-  python server.py --check       只检查题库格式并输出问题，不启动服务
-  python server.py --outline     列出所有专题 → 页面 → 知识点（及每个知识点的题数），不启动服务
+Usage:
+  python server.py               start the server and open the browser
+  python server.py --port 9000   use another port (default 8765; moves to the next one if taken)
+  python server.py --no-browser  don't open the browser
+  python server.py --check       only check the topic files and print the problems; don't start the server
+  python server.py --outline     list all topics → pages → knowledge points (with question counts per point); don't start the server
 
-目录约定（数据格式详见 AGENTS.md）：
-  web/                     前端页面
-  data/topics/<专题>/      题库：topic.json、source.md、mindmap.md（思维导图，可选）、pages/<NN-页面>/{knowledge.md, questions.json}
-                           （仍兼容旧名 data/positions/、position.json、jd.md）
-  data/records/<专题>.jsonl 作答记录（每行一次作答，程序自动追加）
-  data/notes/<专题>/<页面>.md 页面笔记（网页里编辑并自动保存，也可以直接用编辑器打开）
-  data/topics/<专题>/pages/<页面>/_history/  网页里编辑 knowledge.md 时自动保留的旧版本（加载时忽略）
-  .local/                  本机配置（不进 git）：手机连接的开关和已配对的手机、安卓 App 的签名密钥
-  android/                 安卓 App（手机版）：python android/build.py 打包，输出 android/build/drillbook.apk
+Layout (data formats: see AGENTS.md):
+  web/                         front end
+  data/topics/<topic>/         topic folder: topic.json, source.md, mindmap.md (mind map, optional), pages/<NN-page>/{knowledge.md, questions.json}
+                               (the old names data/positions/, position.json and jd.md still work)
+  data/records/<topic>.jsonl   answer records (one answer per line, appended automatically)
+  data/notes/<topic>/<page>.md page notes (edited and autosaved in the web page; can also be opened in any editor)
+  data/topics/<topic>/pages/<page>/_history/  old versions kept automatically when knowledge.md is edited in the web page (ignored when loading)
+  .local/                      local config (not in git): the phone connection switch and paired phones, the Android app signing key
+  android/                     Android app (phone version): build with python android/build.py, output android/build/drillbook.apk
 """
 from __future__ import annotations
 
@@ -44,9 +44,9 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 if sys.version_info < (3, 8):
-    sys.exit("需要 Python 3.8 或更高版本")
+    sys.exit("Python 3.8 or later is required")
 
-try:  # Windows 控制台输出中文时避免编码报错
+try:  # Windows console: replace characters it can't encode (e.g. Chinese titles and notes) instead of crashing
     sys.stdout.reconfigure(errors="replace")
     sys.stderr.reconfigure(errors="replace")
 except Exception:
@@ -57,36 +57,36 @@ WEB_DIR = ROOT / "web"
 DATA_DIR = ROOT / "data"
 TOPICS_DIR = DATA_DIR / "topics"
 if not TOPICS_DIR.is_dir() and (DATA_DIR / "positions").is_dir():
-    TOPICS_DIR = DATA_DIR / "positions"  # 旧版目录名，继续支持
+    TOPICS_DIR = DATA_DIR / "positions"  # old directory name, still supported
 TOPICS_REL = TOPICS_DIR.relative_to(ROOT).as_posix()
-META_FILES = ("topic.json", "position.json")  # 专题元数据；后者是旧名
-SOURCE_FILES = ("source.md", "jd.md")         # 来源原文（JD、目录、大纲）；后者是旧名
-MINDMAP_FILE = "mindmap.md"                   # 思维导图（可选）
-KIND_LABEL = {"job": "岗位", "book": "书", "course": "课程", "exam": "考试"}
+META_FILES = ("topic.json", "position.json")  # topic metadata; the second is the old name
+SOURCE_FILES = ("source.md", "jd.md")         # source text (JD, table of contents, syllabus); the second is the old name
+MINDMAP_FILE = "mindmap.md"                   # mind map (optional)
+KIND_LABEL = {"job": "Job", "book": "Book", "course": "Course", "exam": "Exam"}
 RECORDS_DIR = DATA_DIR / "records"
 ARCHIVE_DIR = RECORDS_DIR / "archive"
 NOTES_DIR = DATA_DIR / "notes"
-NOTE_HISTORY_KEEP = 30     # 每个页面的笔记 / 知识点文件保留的旧版本数
-NOTE_SNAPSHOT_GAP = 600    # 连续编辑时，至少间隔这么多秒才留一份旧版本
-LOCAL_DIR = ROOT / ".local"             # 本机配置，不进 git
-PHONE_FILE = LOCAL_DIR / "phone.json"   # 手机连接：开关、端口、已配对的手机
+NOTE_HISTORY_KEEP = 30     # old versions kept per page for notes / knowledge files
+NOTE_SNAPSHOT_GAP = 600    # during continuous editing, keep at most one old version per this many seconds
+LOCAL_DIR = ROOT / ".local"             # local config, not in git
+PHONE_FILE = LOCAL_DIR / "phone.json"   # phone connection: switch, port, paired phones
 APK_FILE = ROOT / "android" / "build" / "drillbook.apk"
-PHONE_PORT = 8766          # 手机连接用的局域网端口（被占用时顺延）
-PAIR_TTL = 600             # 配对码有效期（秒）
-PAIR_MAX_TRIES = 5         # 配对码输错这么多次就作废
-PAIR_FAIL_LIMIT = 20       # 10 分钟内配对码总共输错这么多次，暂停配对（换配对码不会清零）
+PHONE_PORT = 8766          # LAN port for phone connections (moves to the next one if taken)
+PAIR_TTL = 600             # pairing code lifetime (seconds)
+PAIR_MAX_TRIES = 5         # a pairing code is voided after this many wrong tries
+PAIR_FAIL_LIMIT = 20       # this many wrong pairing codes in total within 10 minutes pauses pairing (a new code doesn't reset it)
 PAIR_FAIL_WINDOW = 600
-NONCE_TTL = 120            # 手机签名请求用的一次性随机数，有效期（秒）
-NONCE_MAX = 64             # 同时有效的随机数上限
+NONCE_TTL = 120            # lifetime (seconds) of the one-time nonces for signed phone requests
+NONCE_MAX = 64             # max number of nonces valid at the same time
 LAN_NETS = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
-ID_RE = re.compile(r"^[\w-]+$")                      # 专题 / 页面 / 知识点 / 题目 id
-TITLE_RE = re.compile(r"^#\s+(.+?)\s*$")              # knowledge.md 第一行：# 页面标题
-POINT_RE = re.compile(r"^##\s+(.+?)\s*(?:\{#([\w-]+)\})?\s*$")  # ## 知识点标题 {#id}
+ID_RE = re.compile(r"^[\w-]+$")                      # topic / page / knowledge point / question id
+TITLE_RE = re.compile(r"^#\s+(.+?)\s*$")              # first line of knowledge.md: # Page title
+POINT_RE = re.compile(r"^##\s+(.+?)\s*(?:\{#([\w-]+)\})?\s*$")  # ## Knowledge point title {#id}
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 PAGE_DIR_RE = re.compile(r"^(\d+)[-_ ]+(.+)$")         # 01-rag -> (1, "rag")
-MM_ITEM_RE = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])\s+(.*?)\s*$")       # mindmap.md 的一个节点：- 文字
-MM_REF_RE = re.compile(r"\s*\{\s*([\w-]*)\s*(?:#\s*([\w-]+))?\s*\}$")  # 行尾 {页面id} / {页面id#知识点id} / {#知识点id}
+MM_ITEM_RE = re.compile(r"^(\s*)(?:[-*+]|\d+[.)])\s+(.*?)\s*$")       # one mindmap.md node: - text
+MM_REF_RE = re.compile(r"\s*\{\s*([\w-]*)\s*(?:#\s*([\w-]+))?\s*\}$")  # at the end of a line: {page-id} / {page-id#point-id} / {#point-id}
 LETTERS = "ABCDEFGH"
 
 MIME = {
@@ -111,7 +111,7 @@ notes_lock = threading.Lock()
 knowledge_lock = threading.Lock()
 
 
-# ───────────────────────────── 题库读取与校验 ─────────────────────────────
+# ───────────────────────────── Loading and checking topic files ─────────────────────────────
 
 class Issues:
     def __init__(self) -> None:
@@ -124,8 +124,13 @@ class Issues:
         self.items.append({"level": "warn", "where": where, "msg": msg})
 
 
+def plural(n: int, one: str, many: str | None = None) -> str:
+    """A count with its noun: 1 question, 2 questions."""
+    return f"{n} {one if n == 1 else many or one + 's'}"
+
+
 def read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8-sig")  # 兼容带 BOM 的 UTF-8（记事本保存）
+    return path.read_text(encoding="utf-8-sig")  # also accepts UTF-8 with a BOM (as saved by Notepad)
 
 
 def read_json(path: Path):
@@ -133,14 +138,14 @@ def read_json(path: Path):
 
 
 def visible_dirs(parent: Path) -> list[Path]:
-    """子文件夹；以 . 或 _ 开头的视为隐藏/草稿，不加载。"""
+    """Subfolders; names starting with . or _ are hidden or drafts and are not loaded."""
     if not parent.is_dir():
         return []
     return [d for d in parent.iterdir() if d.is_dir() and not d.name.startswith((".", "_"))]
 
 
 def parse_knowledge(text: str, where: str, issues: Issues) -> tuple[str | None, str, list[dict]]:
-    """把 knowledge.md 拆成：页面标题、导语、知识点列表（每个 ## 标题是一个知识点）。"""
+    """Split knowledge.md into the page title, the intro and the knowledge points (each ## heading starts one)."""
     title = None
     intro: list[str] = []
     points: list[dict] = []
@@ -175,17 +180,17 @@ def parse_knowledge(text: str, where: str, issues: Issues) -> tuple[str | None, 
         pid = p["id"]
         if not pid:
             pid = f"p{i}"
-            issues.warn(where, f"知识点「{p['title']}」缺少 id，请在标题后写 {{#英文id}}，否则题目无法稳定关联")
+            issues.warn(where, f"Knowledge point \"{p['title']}\" has no id; write {{#english-id}} after the title, otherwise questions can't link to it reliably")
         if pid in seen:
-            issues.error(where, f"知识点 id 重复：{pid}")
+            issues.error(where, f"Duplicate knowledge point id: {pid}")
             continue
         seen.add(pid)
         out.append({"id": pid, "title": p["title"], "content": "\n".join(p["lines"]).strip()})
 
     if title is None:
-        issues.error(where, "第一行需要是页面标题：# 标题")
+        issues.error(where, "The first line must be the page title: # Title")
     if not out:
-        issues.warn(where, "没有知识点（用 ## 标题 {#id} 开始一个知识点）")
+        issues.warn(where, "No knowledge points (start one with ## Title {#id})")
     return title, "\n".join(intro).strip(), out
 
 
@@ -194,71 +199,72 @@ def normalize_answer(answer) -> str:
         answer = "".join(str(a) for a in answer)
     if not isinstance(answer, str):
         return ""
+    # Separators between letters are dropped; the class keeps the Chinese commas because old question files use them
     return "".join(sorted(set(re.sub(r"[\s,，、/]", "", answer.upper()))))
 
 
 def load_questions(path: Path, page_id: str, dir_name: str, points: list[dict], issues: Issues) -> list[dict]:
     where = f"{dir_name}/questions.json"
     if not path.exists():
-        issues.warn(where, "缺少 questions.json")
+        issues.warn(where, "Missing questions.json")
         return []
     try:
         data = read_json(path)
     except json.JSONDecodeError as e:
-        issues.error(where, f"JSON 格式错误：第 {e.lineno} 行第 {e.colno} 列，{e.msg}")
+        issues.error(where, f"Invalid JSON at line {e.lineno}, column {e.colno}: {e.msg}")
         return []
     if isinstance(data, dict) and isinstance(data.get("questions"), list):
         data = data["questions"]
     if not isinstance(data, list):
-        issues.error(where, "内容应为题目数组 [ {...}, {...} ]")
+        issues.error(where, "The content must be an array of questions [ {...}, {...} ]")
         return []
 
     point_ids = {p["id"] for p in points}
     seen: set[str] = set()
     out = []
     for i, q in enumerate(data, 1):
-        qw = f"{where} 第 {i} 题"
+        qw = f"{where} question {i}"
         if not isinstance(q, dict):
-            issues.error(qw, "题目应为对象 {...}")
+            issues.error(qw, "A question must be an object {...}")
             continue
         qid = str(q.get("id") or "").strip()
         if not qid:
-            issues.error(qw, "缺少 id")
+            issues.error(qw, "Missing id")
             continue
         qw = f"{where}#{qid}"
         if not ID_RE.match(qid):
-            issues.error(qw, "id 只能包含字母、数字、下划线、连字符")
+            issues.error(qw, "The id may only contain letters, digits, underscores and hyphens")
             continue
         if qid in seen:
-            issues.error(qw, "id 重复")
+            issues.error(qw, "Duplicate id")
             continue
         seen.add(qid)
 
         stem = q.get("stem")
         options = q.get("options")
         if not isinstance(stem, str) or not stem.strip():
-            issues.error(qw, "缺少题干 stem")
+            issues.error(qw, "Missing stem")
             continue
         if not isinstance(options, list) or len(options) < 2 or not all(isinstance(o, str) and o.strip() for o in options):
-            issues.error(qw, "options 至少需要 2 个非空字符串选项")
+            issues.error(qw, "options needs at least 2 non-empty strings")
             continue
         if len(options) > len(LETTERS):
-            issues.error(qw, f"选项最多 {len(LETTERS)} 个")
+            issues.error(qw, f"At most {len(LETTERS)} options are allowed")
             continue
         if len({o.strip() for o in options}) != len(options):
-            issues.warn(qw, "存在重复选项")
+            issues.warn(qw, "Duplicate options")
 
         answer = normalize_answer(q.get("answer"))
         valid = LETTERS[: len(options)]
         if not answer or any(c not in valid for c in answer):
-            issues.error(qw, f"答案 {q.get('answer')!r} 不在选项范围 A-{valid[-1]} 内")
+            issues.error(qw, f"Answer {q.get('answer')!r} is outside the option range A-{valid[-1]}")
             continue
         qtype = q.get("type") or ("multi" if len(answer) > 1 else "single")
         if qtype not in ("single", "multi"):
-            issues.error(qw, "type 只能是 single 或 multi")
+            issues.error(qw, "type must be single or multi")
             continue
         if qtype == "single" and len(answer) > 1:
-            issues.error(qw, "单选题只能有一个答案")
+            issues.error(qw, "A single-answer question can only have one answer")
             continue
 
         refs = q.get("points") or []
@@ -267,14 +273,14 @@ def load_questions(path: Path, page_id: str, dir_name: str, points: list[dict], 
         refs = [str(r) for r in refs]
         missing = [r for r in refs if r not in point_ids]
         if missing:
-            issues.warn(qw, f"关联的知识点不存在：{', '.join(missing)}")
+            issues.warn(qw, f"Linked knowledge point{'s' if len(missing) > 1 else ''} not found: {', '.join(missing)}")
         refs = [r for r in refs if r in point_ids]
         if not refs:
-            issues.warn(qw, "没有关联任何知识点（points）")
+            issues.warn(qw, "Not linked to any knowledge point (points)")
 
         explanation = str(q.get("explanation") or "").strip()
         if not explanation:
-            issues.warn(qw, "缺少解析 explanation")
+            issues.warn(qw, "Missing explanation")
 
         out.append({
             "id": qid,
@@ -291,7 +297,7 @@ def load_questions(path: Path, page_id: str, dir_name: str, points: list[dict], 
     covered = {r for q in out for r in q["points"]}
     for p in points:
         if p["id"] not in covered:
-            issues.warn(where, f"知识点「{p['title']}」还没有对应的题目")
+            issues.warn(where, f"Knowledge point \"{p['title']}\" has no questions yet")
     return out
 
 
@@ -305,13 +311,13 @@ def load_page(page_dir: Path, issues: Issues) -> dict:
     index, page_id = (int(m.group(1)), m.group(2)) if m else (None, page_dir.name)
     where = page_dir.name
     if not ID_RE.match(page_id):
-        issues.error(where, "页面文件夹名只能包含字母、数字、下划线、连字符，例如 01-rag")
+        issues.error(where, "Page folder names may only contain letters, digits, underscores and hyphens, e.g. 01-rag")
 
     kfile = page_dir / "knowledge.md"
     if kfile.exists():
         title, intro, points = parse_knowledge(read_text(kfile), f"{where}/knowledge.md", issues)
     else:
-        issues.warn(where, "缺少 knowledge.md")
+        issues.warn(where, "Missing knowledge.md")
         title, intro, points = None, "", []
 
     questions = load_questions(page_dir / "questions.json", page_id, page_dir.name, points, issues)
@@ -327,14 +333,14 @@ def load_page(page_dir: Path, issues: Issues) -> dict:
 
 
 def parse_mindmap(text: str, root_title: str, pages: list[dict], issues: Issues) -> dict | None:
-    """把 mindmap.md 解析成树：{text, page?, point?, children?}。
-    · 第一行可以是 # 标题（根节点的文字，默认用专题名），其余每行一个列表项「- 文字」，缩进表示层级
-    · 行尾的 {页面id}、{页面id#知识点id}、{#知识点id} 把节点关联到页面或知识点；{#知识点id} 属于最近的上级页面
-    · 关联了页面或知识点、自己没写文字的节点，显示页面或知识点的标题
-    · 每个知识点应在导图里出现一次：缺了或重复都给出提示"""
+    """Parse mindmap.md into a tree: {text, page?, point?, children?}.
+    · The first line may be # Title (the root text; defaults to the topic name); every other line is one list item "- text", indented to nest
+    · {page-id}, {page-id#point-id} or {#point-id} at the end of a line links the node to a page or knowledge point; {#point-id} belongs to the nearest parent page
+    · A linked node without its own text shows the title of the page or knowledge point
+    · Every knowledge point should appear in the map exactly once: missing and repeated ones get a warning"""
     by_page = {pg["id"]: pg for pg in pages}
     root: dict = {"text": root_title}
-    stack: list[tuple[int, dict, str | None]] = [(-1, root, None)]  # （缩进，节点，所属页面）
+    stack: list[tuple[int, dict, str | None]] = [(-1, root, None)]  # (indent, node, owning page)
     used: dict[tuple[str, str], int] = {}
     items = 0
     titled = False
@@ -342,7 +348,7 @@ def parse_mindmap(text: str, root_title: str, pages: list[dict], issues: Issues)
         line = raw.expandtabs(4).rstrip()
         if not line.strip():
             continue
-        where = f"{MINDMAP_FILE} 第 {n} 行"
+        where = f"{MINDMAP_FILE} line {n}"
         if not items and not titled:
             m = TITLE_RE.match(line)
             if m:
@@ -350,7 +356,7 @@ def parse_mindmap(text: str, root_title: str, pages: list[dict], issues: Issues)
                 continue
         m = MM_ITEM_RE.match(line)
         if not m:
-            issues.warn(where, "不是列表项，已忽略（每个节点写成一行「- 文字」，用缩进表示层级）")
+            issues.warn(where, 'Not a list item; ignored (write each node as one line "- text" and indent to nest)')
             continue
         items += 1
         indent, body = len(m.group(1)), m.group(2)
@@ -364,9 +370,9 @@ def parse_mindmap(text: str, root_title: str, pages: list[dict], issues: Issues)
             pg = by_page.get(page_id) if page_id else None
             fallback = ref.group(0).strip()
             if not page_id:
-                issues.warn(where, f"{fallback} 找不到所属页面：写在页面节点下面，或写成 {{页面id#{point_id}}}")
+                issues.warn(where, f"{fallback} has no page: put it under a page node, or write {{page-id#{point_id}}}")
             elif not pg:
-                issues.warn(where, f"页面「{page_id}」不存在")
+                issues.warn(where, f"Page \"{page_id}\" does not exist")
             elif point_id is None:
                 node["page"], fallback = page_id, pg["title"]
             else:
@@ -375,7 +381,7 @@ def parse_mindmap(text: str, root_title: str, pages: list[dict], issues: Issues)
                     node["page"], node["point"], fallback = page_id, point_id, pt["title"]
                     used[(page_id, point_id)] = used.get((page_id, point_id), 0) + 1
                 else:
-                    issues.warn(where, f"页面「{pg['title']}」没有知识点「{point_id}」")
+                    issues.warn(where, f"Page \"{pg['title']}\" has no knowledge point \"{point_id}\"")
             node = {"text": label or fallback, **node}
         else:
             node = {"text": body}
@@ -383,15 +389,15 @@ def parse_mindmap(text: str, root_title: str, pages: list[dict], issues: Issues)
         stack.append((indent, node, node.get("page") or ctx))
 
     if not items:
-        issues.warn(MINDMAP_FILE, "思维导图没有内容（每个节点写成一行「- 文字」，用缩进表示层级）")
+        issues.warn(MINDMAP_FILE, 'The mind map is empty (write each node as one line "- text" and indent to nest)')
         return None
     for pg in pages:
         for pt in pg["points"]:
             times = used.get((pg["id"], pt["id"]), 0)
             if not times:
-                issues.warn(MINDMAP_FILE, f"知识点「{pg['title']} / {pt['title']}」没有出现在思维导图里")
+                issues.warn(MINDMAP_FILE, f"Knowledge point \"{pg['title']} / {pt['title']}\" is missing from the mind map")
             elif times > 1:
-                issues.warn(MINDMAP_FILE, f"知识点「{pg['title']} / {pt['title']}」在思维导图里出现了 {times} 次")
+                issues.warn(MINDMAP_FILE, f"Knowledge point \"{pg['title']} / {pt['title']}\" appears {times} times in the mind map")
     return root
 
 
@@ -407,7 +413,7 @@ def topic_dir(tid: str) -> Path | None:
 
 
 def first_existing(parent: Path, names: tuple) -> Path | None:
-    """按顺序找第一个存在的文件：新文件名在前，旧名兜底。"""
+    """The first of names that exists as a file: the new name comes first, old names are the fallback."""
     for name in names:
         f = parent / name
         if f.is_file():
@@ -423,12 +429,12 @@ def load_topic(tdir: Path) -> dict:
         try:
             meta = read_json(mfile)
         except json.JSONDecodeError as e:
-            issues.error(mfile.name, f"JSON 格式错误：第 {e.lineno} 行第 {e.colno} 列，{e.msg}")
+            issues.error(mfile.name, f"Invalid JSON at line {e.lineno}, column {e.colno}: {e.msg}")
         if not isinstance(meta, dict):
-            issues.error(mfile.name, "内容应为对象 {...}")
+            issues.error(mfile.name, "The content must be an object {...}")
             meta = {}
     else:
-        issues.warn("topic.json", "缺少 topic.json，暂用文件夹名作为专题名")
+        issues.warn("topic.json", "Missing topic.json; using the folder name as the topic name for now")
 
     sfile = first_existing(tdir, SOURCE_FILES)
     source = read_text(sfile).strip() if sfile else None
@@ -438,12 +444,12 @@ def load_topic(tdir: Path) -> dict:
     for d in sorted(visible_dirs(tdir / "pages"), key=page_sort_key):
         page = load_page(d, issues)
         if page["id"] in seen:
-            issues.error(d.name, f"页面 id 重复：{page['id']}")
+            issues.error(d.name, f"Duplicate page id: {page['id']}")
             continue
         seen.add(page["id"])
         pages.append(page)
     if not pages:
-        issues.warn("pages", "还没有页面（在 pages/ 下新建 01-xxx 文件夹）")
+        issues.warn("pages", "No pages yet (create a folder such as 01-xxx under pages/)")
 
     mfile = tdir / MINDMAP_FILE
     name = str(meta.get("name") or tdir.name)
@@ -457,13 +463,13 @@ def load_topic(tdir: Path) -> dict:
         ids = {p["id"] for p in pages}
         for f in sorted(note_dir.glob("*.md")):
             if f.stem not in ids:
-                issues.warn(f"data/notes/{tdir.name}/{f.name}", "这份笔记没有对应的页面（页面 id 改过的话，把文件名改成新的页面 id）")
+                issues.warn(f"data/notes/{tdir.name}/{f.name}", "This note has no matching page (if the page id changed, rename the file to the new page id)")
 
     return {
         "id": tdir.name,
         "name": name,
         "kind": str(meta.get("kind") or "").strip(),
-        "origin": str(meta.get("origin") or meta.get("company") or ""),  # company 是旧字段名
+        "origin": str(meta.get("origin") or meta.get("company") or ""),  # company is the old field name
         "description": str(meta.get("description") or ""),
         "order": meta.get("order") if isinstance(meta.get("order"), (int, float)) else 0,
         "source": source,
@@ -499,17 +505,18 @@ def list_topics() -> list[dict]:
     return out
 
 
-# ───────────────────────────── 专题顺序 ─────────────────────────────
+# ───────────────────────────── Topic order ─────────────────────────────
 #
-# 专题列表按 topic.json 的 order 排（小的在前，相同时按名字）。在网页上拖动专题后，
-# 按新顺序把各专题的 order 改写成 1、2、3……（只写值变了的文件）。手机上拖动过的顺序在同步时合并，见 merge_phone_order
+# The topic list is sorted by the order in topic.json (smaller first, ties by name). After topics are dragged in the web
+# page, each topic's order is rewritten as 1, 2, 3… in the new order (only files whose value changed are written). An order
+# dragged on the phone is merged during sync, see merge_phone_order
 
 meta_lock = threading.RLock()
 
 
 def merge_order(current: list[str], wanted) -> list[str]:
-    """按 wanted 的先后重排 current：wanted 里提到的专题按它的先后，占住它们在 current 里原来的那几个位置；
-    没提到的专题（例如网页打开之后才新建的）位置不变，已经不存在的专题忽略。"""
+    """Reorder current by wanted: the topics named in wanted fill, in wanted's order, the positions they held in current;
+    topics not named (e.g. created after the web page was opened) keep their place, and topics that no longer exist are ignored."""
     have = set(current)
     picked: list[str] = []
     seen: set[str] = set()
@@ -522,7 +529,7 @@ def merge_order(current: list[str], wanted) -> list[str]:
 
 
 def same_relative_order(a: list, b: list) -> bool:
-    """两份顺序里共同的专题先后是否一致（只是多了或少了专题，不算改过顺序）。"""
+    """Whether the topics the two orders share come in the same sequence (topics merely added or removed don't count as a reorder)."""
     a = [t for t in a if isinstance(t, str)]
     b = [t for t in b if isinstance(t, str)]
     common = set(a) & set(b)
@@ -530,8 +537,8 @@ def same_relative_order(a: list, b: list) -> bool:
 
 
 def write_topic_order(wanted) -> int:
-    """按 wanted（专题 id 的列表）重排专题，把新的 order 写进各专题的 topic.json。返回改写了几个文件。
-    有 topic.json 读不出来时一个都不改，抛出 ValueError。"""
+    """Reorder the topics by wanted (a list of topic ids) and write the new order into each topic's topic.json. Returns how many
+    files were rewritten. If any topic.json can't be read, nothing is changed and ValueError is raised."""
     with meta_lock:
         current = [p["id"] for p in list_topics()]
         plan = []
@@ -545,7 +552,7 @@ def write_topic_order(wanted) -> int:
                 except ValueError:
                     meta = None
                 if not isinstance(meta, dict):
-                    raise ValueError(f"{TOPICS_REL}/{tid}/{mfile.name} 的格式有误，修好之后再调整顺序")
+                    raise ValueError(f"{TOPICS_REL}/{tid}/{mfile.name} is malformed; fix it before changing the order")
             if type(meta.get("order")) is int and meta["order"] == i:
                 continue
             meta["order"] = i
@@ -561,7 +568,7 @@ def write_topic_order(wanted) -> int:
 
 
 def topic_order_time() -> int:
-    """电脑上的专题顺序最近一次可能变化的时间（毫秒）：各专题 topic.json 里最晚的修改时间。"""
+    """When the topic order on the computer may last have changed (ms): the latest modification time of any topic.json."""
     latest = 0.0
     for d in visible_dirs(TOPICS_DIR):
         f = first_existing(d, META_FILES) if ID_RE.match(d.name) else None
@@ -571,9 +578,9 @@ def topic_order_time() -> int:
 
 
 def merge_phone_order(order: dict) -> dict:
-    """合并手机上拖动过的专题顺序。base 是手机上次同步时电脑上的顺序：
-    · 电脑上的顺序和 base 一致 → 电脑没改过，用手机的
-    · 不一致 → 两边都改过：用改得晚的（电脑这边按 topic.json 的修改时间算）"""
+    """Merge a topic order dragged on the phone. base is the computer's order at the phone's last sync:
+    · the computer's order matches base → the computer hasn't changed it: use the phone's
+    · it doesn't → both sides changed it: use the later change (on the computer, judged by topic.json modification times)"""
     with meta_lock:
         current = [p["id"] for p in list_topics()]
         base = order.get("base") if isinstance(order.get("base"), list) else []
@@ -588,7 +595,7 @@ def merge_phone_order(order: dict) -> dict:
     return {"kept": "phone", "conflict": pc_changed, "changed": changed}
 
 
-# ───────────────────────────── 作答记录 ─────────────────────────────
+# ───────────────────────────── Answer records ─────────────────────────────
 
 def records_file(tid: str) -> Path:
     return RECORDS_DIR / f"{tid}.jsonl"
@@ -657,7 +664,7 @@ def resets_file() -> Path:
 
 
 def read_resets() -> dict:
-    """每个专题最近一次重置的时间（毫秒）。早于它的作答记录不再算数；手机同步时两边都按它清理。"""
+    """Each topic's latest reset time (ms). Answer records before it no longer count; phone sync cleans up both sides by it."""
     try:
         data = json.loads(resets_file().read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -686,7 +693,7 @@ def archive_target(tid: str) -> Path:
 
 
 def archive_records(tid: str) -> str | None:
-    """重置 = 把记录文件移动到 data/records/archive/，不直接删除；并记下重置时间（手机同步时按它清理）。"""
+    """Reset = move the records file to data/records/archive/ instead of deleting it, and note the reset time (phone sync cleans up by it)."""
     src = records_file(tid)
     with records_lock:
         resets = read_resets()
@@ -700,7 +707,8 @@ def archive_records(tid: str) -> str | None:
 
 
 def archive_before_locked(tid: str, cutoff: int) -> int:
-    """手机上重置过：把早于重置时间的记录移到 archive/，之后的留下。返回移走的条数；调用方须持有 records_lock。"""
+    """The topic was reset on the phone: move records older than the reset time to archive/ and keep the later ones.
+    Returns how many records were moved; the caller must hold records_lock."""
     src = records_file(tid)
     if not src.exists():
         return 0
@@ -727,7 +735,7 @@ def archive_before_locked(tid: str, cutoff: int) -> int:
     return len(old)
 
 
-# ───────────────────────────── 页面笔记 ─────────────────────────────
+# ───────────────────────────── Page notes ─────────────────────────────
 
 def page_ids(tdir: Path) -> set[str]:
     ids = set()
@@ -742,7 +750,7 @@ def note_file(tid: str, page_id: str) -> Path:
 
 
 def digest(raw: bytes) -> str:
-    """文件内容指纹：网页保存时带上它，用来发现文件是否在别处被改过。"""
+    """Content fingerprint: the web page sends it back when saving, so changes made to the file elsewhere are detected."""
     return hashlib.sha256(raw).hexdigest()[:16] if raw else ""
 
 
@@ -758,7 +766,8 @@ def read_note(tid: str, page_id: str) -> dict:
 
 
 def snapshot(hdir: Path, old_raw: bytes, new_size: int) -> None:
-    """覆盖前把旧内容存到 hdir：连续编辑时每 10 分钟最多一份；内容一下少了一半以上（比如误删）时总会存。"""
+    """Save the old content to hdir before it is overwritten: at most one copy per 10 minutes of continuous editing,
+    but always when the content suddenly shrinks by more than half (e.g. an accidental delete)."""
     snaps = sorted(hdir.glob("*.md")) if hdir.is_dir() else []
     recent = bool(snaps) and time.time() - snaps[-1].stat().st_mtime < NOTE_SNAPSHOT_GAP
     if recent and new_size >= len(old_raw) * 0.5:
@@ -784,7 +793,7 @@ def write_note(tid: str, page_id: str, content: str, base: str | None) -> tuple[
         old_raw = path.read_bytes() if path.is_file() else b""
         current = digest(old_raw)
         if base is not None and base != current:
-            return 409, {"error": "笔记文件已在别处修改", "content": decode_note(old_raw), "hash": current}
+            return 409, {"error": "The note file was changed elsewhere", "content": decode_note(old_raw), "hash": current}
         if old_raw and old_raw != new_raw:
             snapshot(NOTES_DIR / tid / "_history" / page_id, old_raw, len(new_raw))
         if not content.strip():
@@ -797,11 +806,11 @@ def write_note(tid: str, page_id: str, content: str, base: str | None) -> tuple[
             f.write(new_raw)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, path)  # 原子替换：保存过程中断电也不会留下半个文件
+        os.replace(tmp, path)  # atomic replace: a power cut while saving never leaves half a file
         return 200, {"hash": digest(new_raw), "size": len(new_raw)}
 
 
-# ───────────────────────────── 知识点文件编辑 ─────────────────────────────
+# ───────────────────────────── Editing knowledge files ─────────────────────────────
 
 def page_dir_of(tdir: Path, page_id: str) -> Path | None:
     for d in visible_dirs(tdir / "pages"):
@@ -819,7 +828,7 @@ def read_knowledge(tid: str, page_dir: Path) -> dict:
 
 
 def check_knowledge(page_dir: Path, old_text: str, new_text: str) -> list[dict]:
-    """保存后立即解析一遍：格式问题，以及被删掉或改名、却仍有题目关联的知识点 id。"""
+    """Parse right after saving: format problems, plus knowledge point ids that were deleted or renamed but are still linked."""
     issues = Issues()
     where = f"{page_dir.name}/knowledge.md"
     new_points = parse_knowledge(new_text, where, issues)[2]
@@ -840,9 +849,9 @@ def check_knowledge(page_dir: Path, old_text: str, new_text: str) -> list[dict]:
             pass
         for pid in sorted(removed):
             if refs.get(pid):
-                issues.error(where, f"知识点 id「{pid}」被删除或改名，但本页仍有 {refs[pid]} 道题关联它")
+                issues.error(where, f"Knowledge point id \"{pid}\" was deleted or renamed, but it is still linked from {plural(refs[pid], 'question')} on this page")
             else:
-                issues.warn(where, f"知识点 id「{pid}」被删除或改名，指向它的站内链接会失效")
+                issues.warn(where, f"Knowledge point id \"{pid}\" was deleted or renamed; links to it within the site will stop working")
     return issues.items
 
 
@@ -853,7 +862,7 @@ def write_knowledge(page_dir: Path, content: str, base: str | None) -> tuple[int
         old_raw = path.read_bytes() if path.is_file() else b""
         current = digest(old_raw)
         if base is not None and base != current:
-            return 409, {"error": "knowledge.md 已在别处修改", "content": decode_note(old_raw), "hash": current}
+            return 409, {"error": "knowledge.md was changed elsewhere", "content": decode_note(old_raw), "hash": current}
         if old_raw and old_raw != new_raw:
             snapshot(page_dir / "_history", old_raw, len(new_raw))
         tmp = path.with_name(path.name + ".tmp")
@@ -866,23 +875,24 @@ def write_knowledge(page_dir: Path, content: str, base: str | None) -> tuple[int
     return 200, {"hash": digest(new_raw), "size": len(new_raw), "issues": issues}
 
 
-# ───────────────────────────── 手机连接 ─────────────────────────────
+# ───────────────────────────── Phone connection ─────────────────────────────
 #
-# 安卓 App（android/）把网站代码打包在自己里面离线运行，和这台电脑通过局域网双向同步。
-# · 默认关闭。在电脑网页的「连接手机」里打开后，额外监听一个局域网端口（默认 8766）；
-#   这个端口只提供下面几个手机用的接口和 App 安装包，不提供网页和其他接口
-# · 第一次连接要输入电脑网页上显示的 6 位配对码（10 分钟内有效，输错 5 次作废），手机拿到一个长期令牌。
-#   之后令牌不再在网络上传输：同步请求用它签名（见 PhoneLink.verify）。电脑上只保存令牌的 sha256
-# · 同步规则见 apply_phone_sync / merge_phone_note；各专题的重置时间记在 data/records/resets.json
-# · 开关、端口和已配对的手机保存在 .local/phone.json（不进 git）
+# The Android app (android/) carries its own copy of the site code, runs offline and syncs both ways with this computer over the LAN.
+# · Off by default. Turning it on under "Connect phone" in the computer's web page opens an extra LAN port (default 8766);
+#   that port serves only the phone endpoints below and the app package, not the web page or the other endpoints
+# · The first connection needs the 6-digit pairing code shown in the computer's web page (valid for 10 minutes, void after
+#   5 wrong tries); the phone gets a long-lived token. After that the token never crosses the network: sync requests are
+#   signed with it (see PhoneLink.verify). The computer keeps only the token's sha256
+# · Sync rules: see apply_phone_sync / merge_phone_note; each topic's reset time is kept in data/records/resets.json
+# · The switch, the port and the paired phones are saved in .local/phone.json (not in git)
 
 def lan_addresses() -> list[str]:
-    """这台电脑在局域网里的 IPv4 地址，默认出口网卡的排在最前。"""
+    """This computer's IPv4 addresses on the LAN, the default outgoing interface first."""
     found: list[str] = []
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
-            s.connect(("192.0.2.1", 9))  # UDP 的 connect 不发包，只用来查出口网卡
+            s.connect(("192.0.2.1", 9))  # a UDP connect sends no packet; it only finds the outgoing interface
             found.append(s.getsockname()[0])
         finally:
             s.close()
@@ -898,21 +908,21 @@ def lan_addresses() -> list[str]:
             addr = ipaddress.ip_address(ip)
         except ValueError:
             continue
-        # 只要家庭 / 局域网地址段（与 App 允许连接的范围一致）；代理软件的虚拟网卡（如 198.18.x）不算
+        # Home / LAN ranges only (the same ones the app may connect to); virtual adapters of proxy software (e.g. 198.18.x) don't count
         if any(addr in net for net in LAN_NETS) and ip not in out:
             out.append(ip)
     return out
 
 
 def topic_fingerprint(p: dict) -> str:
-    """题库内容的指纹（不含随笔记变化的 noteSize）：手机上已有同一份时不再重复下发。"""
+    """Fingerprint of a topic's content (without noteSize, which changes with the notes): not sent again if the phone already has it."""
     pages = [{k: v for k, v in pg.items() if k != "noteSize"} for pg in p["pages"]]
     return digest(json.dumps(dict(p, pages=pages), ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
 
 def phone_bundle(server_id: str, known=None) -> dict:
-    """手机拿到的电脑上的全部数据：题库（解析好的）、作答记录、笔记、重置时间。
-    known 是手机上已有的题库指纹 {专题: 指纹}，指纹没变的专题只发记录和笔记。"""
+    """All of the computer's data that the phone receives: topics (parsed), answer records, notes, reset times.
+    known holds the fingerprints the phone already has {topic: fingerprint}; for unchanged topics only records and notes are sent."""
     known = known if isinstance(known, dict) else {}
     topics, data = [], {}
     for p in all_topics():
@@ -940,7 +950,7 @@ def phone_bundle(server_id: str, known=None) -> dict:
 
 
 def save_note_copy(tid: str, page_id: str, raw: bytes, who: str) -> str | None:
-    """两边都改过的笔记：没被采用的那份存进 _history/<页面>/，文件名带 -phone（手机的）或 -pc（电脑的）。"""
+    """A note changed on both sides: the copy that wasn't used goes into _history/<page>/, named with -phone (the phone's) or -pc (the computer's)."""
     if not raw:
         return None
     hdir = NOTES_DIR / tid / "_history" / page_id
@@ -955,9 +965,9 @@ def save_note_copy(tid: str, page_id: str, raw: bytes, who: str) -> str | None:
 
 
 def merge_phone_note(tid: str, page_id: str, content: str, base, updated_at, page_exists: bool) -> dict | None:
-    """合并手机上改过的一份笔记。base 是手机上次同步时电脑那份的指纹：
-    · 等于电脑当前的指纹 → 电脑没改过，用手机的
-    · 不等 → 两边都改过：用改得晚的那份，另一份另存，不丢"""
+    """Merge one note changed on the phone. base is the fingerprint of the computer's copy at the phone's last sync:
+    · equal to the computer's current fingerprint → the computer hasn't changed it: use the phone's
+    · different → both sides changed it: use the one changed later and save the other separately, so nothing is lost"""
     content = content.replace("\r\n", "\n")
     mine = content.encode("utf-8") if content.strip() else b""
     path = note_file(tid, page_id)
@@ -966,25 +976,25 @@ def merge_phone_note(tid: str, page_id: str, content: str, base, updated_at, pag
         mtime = int(path.stat().st_mtime * 1000) if raw else 0
     current = digest(raw)
     if digest(mine) == current:
-        return None  # 两边已经一样
+        return None  # both sides are already the same
     info = {"tid": tid, "pageId": page_id}
-    if not page_exists:  # 电脑上已经没有这个页面：手机这份另存
+    if not page_exists:  # the page no longer exists on the computer: save the phone's copy separately
         return dict(info, conflict=True, kept="pc", saved=save_note_copy(tid, page_id, mine, "phone"))
     pc_changed = base != current
     if pc_changed and not (isinstance(updated_at, (int, float)) and updated_at > mtime):
         return dict(info, conflict=True, kept="pc", saved=save_note_copy(tid, page_id, mine, "phone"))
     saved = save_note_copy(tid, page_id, raw, "pc") if pc_changed else None
     status, _ = write_note(tid, page_id, content, current)
-    if status != 200:  # 就在这一刻电脑上又改了：这次不动，下次同步再合并
+    if status != 200:  # changed on the computer at this very moment: leave it and merge at the next sync
         return dict(info, retry=True)
     return dict(info, conflict=True, kept="phone", saved=saved) if pc_changed else dict(info, kept="phone")
 
 
 def apply_phone_sync(body: dict) -> dict:
-    """把手机上的改动合并进电脑：重置、作答记录、笔记、专题顺序。返回合并结果。
-    · 重置取两边较晚的那次；手机的更晚时，电脑上更早的记录移到 data/records/archive/
-    · 作答记录两边合并，同一时间、同一道题算同一条；早于重置时间的不要
-    · 笔记见 merge_phone_note，专题顺序见 merge_phone_order"""
+    """Merge the phone's changes into the computer: resets, answer records, notes, topic order. Returns the merge report.
+    · The later reset of the two sides wins; if the phone's is later, older records on the computer move to data/records/archive/
+    · Answer records from both sides are combined, same time + same question counting as one; records before the reset time are dropped
+    · Notes: see merge_phone_note; topic order: see merge_phone_order"""
     report: dict = {"records": 0, "notes": [], "conflicts": [], "resets": [], "order": None}
     topics = {d.name: d for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)}
     now = int(time.time() * 1000)
@@ -1038,28 +1048,28 @@ def apply_phone_sync(body: dict) -> dict:
 def log_sync(device: dict, report: dict) -> None:
     parts = []
     if report["records"]:
-        parts.append(f"{report['records']} 条作答记录")
+        parts.append(plural(report["records"], "answer record"))
     if report["notes"]:
-        parts.append(f"{len(report['notes'])} 份笔记")
+        parts.append(plural(len(report["notes"]), "note"))
     if report["resets"]:
-        parts.append("重置 " + "、".join(r["tid"] for r in report["resets"]))
+        parts.append("reset (" + ", ".join(r["tid"] for r in report["resets"]) + ")")
     order = report.get("order") or {}
     if order.get("changed"):
-        parts.append("专题顺序")
+        parts.append("topic order")
     if parts:
-        print(f"手机同步（{device.get('name')}）：收到 " + "，".join(parts), flush=True)
+        print(f"Phone sync ({device.get('name')}): received " + ", ".join(parts), flush=True)
     for c in report["conflicts"]:
-        kept = "手机" if c.get("kept") == "phone" else "电脑"
-        where = f"，另一份存在 {c['saved']}" if c.get("saved") else ""
-        print(f"  笔记 {c['tid']}/{c['pageId']} 两边都改过：保留{kept}上的版本{where}", flush=True)
+        kept = "phone" if c.get("kept") == "phone" else "computer"
+        where = f"; the other copy is in {c['saved']}" if c.get("saved") else ""
+        print(f"  Note {c['tid']}/{c['pageId']} was changed on both sides: kept the {kept}'s version{where}", flush=True)
     if order.get("conflict"):
-        print(f"  专题顺序两边都改过：保留{'手机' if order.get('kept') == 'phone' else '电脑'}上的顺序", flush=True)
+        print(f"  Topic order was changed on both sides: kept the {'phone' if order.get('kept') == 'phone' else 'computer'}'s order", flush=True)
     if order.get("error"):
-        print(f"  手机上的专题顺序没能写入：{order['error']}", flush=True)
+        print(f"  Couldn't write the topic order from the phone: {order['error']}", flush=True)
 
 
 class PhoneLink:
-    """手机连接的状态：配对码、已配对的手机、局域网端口的开关。"""
+    """Phone connection state: pairing code, paired phones, and the switch for the LAN port."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -1067,8 +1077,8 @@ class PhoneLink:
         self.port: int | None = None
         self.error = ""
         self.pairing: dict | None = None  # {"code", "expires", "tries"}
-        self.failures: list[float] = []   # 最近输错配对码的时间
-        self.nonces: dict[str, float] = {}  # 签名请求用的一次性随机数 → 过期时间
+        self.failures: list[float] = []   # times of recent wrong pairing codes
+        self.nonces: dict[str, float] = {}  # one-time nonces for signed requests → expiry time
         self.config = self._load()
 
     @staticmethod
@@ -1136,7 +1146,7 @@ class PhoneLink:
                 except OSError:
                     continue
             else:
-                self.error = f"端口 {base}-{base + 9} 都被占用了"
+                self.error = f"Ports {base}-{base + 9} are all in use"
                 return False
             self.httpd, self.port, self.error = httpd, p, ""
         threading.Thread(target=httpd.serve_forever, name="phone", daemon=True).start()
@@ -1158,23 +1168,23 @@ class PhoneLink:
             now = time.time()
             self.failures = [t for t in self.failures if now - t < PAIR_FAIL_WINDOW]
             if len(self.failures) >= PAIR_FAIL_LIMIT:
-                return 429, {"error": "配对码输错的次数太多，请 10 分钟后再试"}
+                return 429, {"error": "Too many wrong pairing codes; try again in 10 minutes"}
             p = self.pairing
             if not p or p["expires"] < now:
                 self.pairing = None
-                return 403, {"error": "配对码已失效：在电脑上的「连接手机」里换一个"}
+                return 403, {"error": "The pairing code has expired: get a new one under \"Connect phone\" on the computer"}
             if not isinstance(code, str) or not hmac.compare_digest(re.sub(r"\s", "", code).encode(), p["code"].encode()):
                 self.failures.append(now)
                 p["tries"] += 1
                 if p["tries"] >= PAIR_MAX_TRIES:
                     self.pairing = None
-                    return 403, {"error": "配对码输错次数太多，已作废：在电脑上换一个"}
-                return 403, {"error": "配对码不对"}
+                    return 403, {"error": "Too many wrong tries, so this pairing code is void: get a new one on the computer"}
+                return 403, {"error": "Wrong pairing code"}
             token = secrets.token_hex(32)
             now = int(time.time() * 1000)
             device = {
                 "id": secrets.token_hex(4),
-                "name": name.strip()[:40] if isinstance(name, str) and name.strip() else "手机",
+                "name": name.strip()[:40] if isinstance(name, str) and name.strip() else "Phone",
                 "tokenHash": hashlib.sha256(token.encode()).hexdigest(),
                 "pairedAt": now,
                 "lastSeen": now,
@@ -1195,8 +1205,9 @@ class PhoneLink:
             return nonce
 
     def verify(self, headers, method: str, path: str, raw: bytes) -> dict | None:
-        """校验手机的签名请求，返回对应的手机。配对之后令牌不再在网络上传输：手机用 sha256(令牌) 作密钥，
-        对「方法、路径、一次性随机数、请求体指纹」做 HMAC；随机数用一次就作废，截获的请求不能重放。"""
+        """Verify a phone's signed request and return that phone. After pairing the token never crosses the network: the phone
+        uses sha256(token) as the key for an HMAC over "method, path, one-time nonce, body hash"; a nonce works only once, so a
+        captured request can't be replayed."""
         did = headers.get("X-Drillbook-Device") or ""
         nonce = headers.get("X-Drillbook-Nonce") or ""
         sig = headers.get("X-Drillbook-Signature") or ""
@@ -1225,10 +1236,10 @@ class PhoneLink:
 link = PhoneLink()
 
 
-# ───────────────────────────── HTTP 服务 ─────────────────────────────
+# ───────────────────────────── HTTP server ─────────────────────────────
 
 class ApiMixin:
-    """电脑网页用的服务和手机连接用的局域网端口共用：JSON 收发、手机接口、App 安装包。"""
+    """Shared by the server for the computer's web page and the LAN port for phones: JSON in and out, phone endpoints, the app package."""
 
     def send_json(self, obj, status: int = 200, compress: bool = False):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -1245,20 +1256,20 @@ class ApiMixin:
 
     def read_raw(self) -> bytes:
         length = int(self.headers.get("Content-Length") or 0)
-        if length < 0 or length > 5_000_000:  # 负数会让 read() 一直读到连接关闭
-            raise ValueError("请求体长度无效")
+        if length < 0 or length > 5_000_000:  # a negative length would make read() wait until the connection closes
+            raise ValueError("Invalid request body length")
         return self.rfile.read(length) if length else b""
 
     def read_body(self):
         return json.loads(self.read_raw().decode("utf-8") or "null")
 
     def is_json(self) -> bool:
-        """写操作要求 JSON 请求头：别的网站只能发「简单请求」（text/plain、表单），带不上这个头。"""
+        """Writes require a JSON Content-Type: other sites can only send "simple requests" (text/plain, forms), which can't carry it."""
         return (self.headers.get("Content-Type") or "").lower().startswith("application/json")
 
     def send_apk(self):
         if not APK_FILE.is_file():
-            return self.send_json({"error": "还没有打包 App：在项目文件夹里运行 python android/build.py"}, 404)
+            return self.send_json({"error": "The app hasn't been built yet: run python android/build.py in the project folder"}, 404)
         data = APK_FILE.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", "application/vnd.android.package-archive")
@@ -1268,12 +1279,12 @@ class ApiMixin:
         self.wfile.write(data)
 
     def handle_phone(self, method: str, parts: list[str]) -> bool:
-        """手机用的接口（两个服务都提供）。不是这几个接口时返回 False。"""
+        """The phone endpoints (served by both servers). Returns False for any other endpoint."""
         if method == "GET" and parts == ["phone", "hello"]:
             self.send_json({"app": "drillbook", "serverId": link.config["serverId"], "name": socket.gethostname()})
         elif method == "POST" and parts == ["phone", "pair"]:
             if not self.is_json():
-                self.send_json({"error": "请求需要 JSON 格式"}, 415)
+                self.send_json({"error": "The request must be JSON"}, 415)
                 return True
             body = self.read_body()
             body = body if isinstance(body, dict) else {}
@@ -1282,14 +1293,14 @@ class ApiMixin:
         elif method == "GET" and parts == ["phone", "nonce"]:
             self.send_json({"nonce": link.new_nonce()})
         elif method == "POST" and parts == ["phone", "sync"]:
-            # 同步：先把手机上的改动合并进电脑，再把合并后的全部数据发回手机
+            # Sync: first merge the phone's changes into the computer, then send all the merged data back to the phone
             if not self.is_json():
-                self.send_json({"error": "请求需要 JSON 格式"}, 415)
+                self.send_json({"error": "The request must be JSON"}, 415)
                 return True
             raw = self.read_raw()
             device = link.verify(self.headers, method, "/api/phone/sync", raw)
             if not device:
-                self.send_json({"error": "这台手机需要重新配对（可能已在电脑上被移除）"}, 401)
+                self.send_json({"error": "This phone needs to be paired again (it may have been removed on the computer)"}, 401)
                 return True
             body = json.loads(raw.decode("utf-8") or "null")
             body = body if isinstance(body, dict) else {}
@@ -1307,7 +1318,7 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
 
-    def log_message(self, fmt, *args):  # 保持控制台安静
+    def log_message(self, fmt, *args):  # keep the console quiet
         pass
 
     def end_headers(self):
@@ -1315,7 +1326,7 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
         super().end_headers()
 
     def guess_type(self, path):
-        # Windows 注册表可能把 .js 映射成 text/plain，导致 ES 模块加载失败，这里显式指定
+        # The Windows registry may map .js to text/plain, which breaks loading ES modules, so the types are set explicitly here
         return MIME.get(os.path.splitext(str(path))[1].lower()) or super().guess_type(path)
 
     def list_directory(self, path):
@@ -1343,18 +1354,18 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
         self.send_error(405)
 
     def local_host(self) -> bool:
-        """请求是否以本机地址访问：别的网站借 DNS 重绑定指向 127.0.0.1 时，Host 是它自己的域名。"""
+        """Whether the request addresses this machine by a local name: when another site points at 127.0.0.1 through DNS rebinding, Host is its own domain."""
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
         return host in ("", "127.0.0.1", "localhost") or host.endswith(".localhost")
 
     def handle_phone_admin(self, method: str, parts: list[str]):
-        """电脑网页里的「连接手机」：开关、配对码、已配对的手机。"""
+        """The "Connect phone" panel in the computer's web page: the switch, the pairing code, the paired phones."""
         if parts == ["phone"] and method == "GET":
             return self.send_json(link.status())
         if parts == ["phone"] and method == "POST":
             body = self.read_body()
             if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
-                return self.send_json({"error": "缺少 enabled"}, 400)
+                return self.send_json({"error": "Missing enabled"}, 400)
             link.set_enabled(body["enabled"])
             if body["enabled"] and link.httpd:
                 link.new_code()
@@ -1365,17 +1376,18 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
         if len(parts) == 4 and parts[1] == "devices" and parts[3] == "remove" and method == "POST":
             link.remove_device(parts[2])
             return self.send_json(link.status())
-        return self.send_json({"error": "未知接口"}, 404)
+        return self.send_json({"error": "Unknown endpoint"}, 404)
 
     def handle_api(self, method: str, path: str):
         parts = [unquote(p) for p in path.split("/")[2:] if p]
         try:
-            # 只接受本机网页的请求：别的网站可以让浏览器向 127.0.0.1 发请求（改笔记、打开手机端口），
-            # 但改不了 Host，也发不出带 JSON 请求头的跨站请求（需要预检，本服务不响应）
+            # Only requests from the local web page: another site can make the browser send requests to 127.0.0.1 (to change
+            # notes, open the phone port), but it can't change Host or send cross-site requests with a JSON Content-Type
+            # (those need a preflight, which this server doesn't answer)
             if not self.local_host():
-                return self.send_json({"error": "只能用 127.0.0.1 或 localhost 访问"}, 403)
+                return self.send_json({"error": "Only accessible via 127.0.0.1 or localhost"}, 403)
             if method in ("POST", "PUT") and not self.is_json():
-                return self.send_json({"error": "请求需要 JSON 格式（Content-Type: application/json）"}, 415)
+                return self.send_json({"error": "The request must be JSON (Content-Type: application/json)"}, 415)
 
             if parts[:1] == ["phone"]:
                 if self.handle_phone(method, parts):
@@ -1389,7 +1401,7 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
                 body = self.read_body()
                 ids = body.get("order") if isinstance(body, dict) else None
                 if not isinstance(ids, list) or not all(isinstance(t, str) for t in ids):
-                    return self.send_json({"error": "缺少专题顺序 order（专题 id 的列表）"}, 400)
+                    return self.send_json({"error": "Missing the topic order (order, a list of topic ids)"}, 400)
                 try:
                     write_topic_order(ids)
                 except ValueError as e:
@@ -1399,13 +1411,13 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
             if method == "GET" and len(parts) == 2 and parts[0] == "topics":
                 tdir = topic_dir(parts[1])
                 if not tdir:
-                    return self.send_json({"error": "专题不存在"}, 404)
+                    return self.send_json({"error": "Topic not found"}, 404)
                 return self.send_json(load_topic(tdir))
 
             if len(parts) >= 2 and parts[0] == "records":
                 tid = parts[1]
                 if not topic_dir(tid):
-                    return self.send_json({"error": "专题不存在"}, 404)
+                    return self.send_json({"error": "Topic not found"}, 404)
                 if method == "GET" and len(parts) == 2:
                     recs, skipped = read_records(tid)
                     return self.send_json({"records": recs, "skipped": skipped})
@@ -1420,15 +1432,15 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
                 tid, page_id = parts[1], parts[2]
                 tdir = topic_dir(tid)
                 if not tdir:
-                    return self.send_json({"error": "专题不存在"}, 404)
+                    return self.send_json({"error": "Topic not found"}, 404)
                 if not ID_RE.match(page_id) or page_id not in page_ids(tdir):
-                    return self.send_json({"error": "页面不存在"}, 404)
+                    return self.send_json({"error": "Page not found"}, 404)
                 if method == "GET":
                     return self.send_json(read_note(tid, page_id))
                 if method == "PUT":
                     body = self.read_body()
                     if not isinstance(body, dict) or not isinstance(body.get("content"), str):
-                        return self.send_json({"error": "缺少笔记内容 content"}, 400)
+                        return self.send_json({"error": "Missing the note content (content)"}, 400)
                     base = body.get("base") if isinstance(body.get("base"), str) else None
                     status, payload = write_note(tid, page_id, body["content"], base)
                     return self.send_json(payload, status)
@@ -1437,39 +1449,39 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
                 tid, page_id = parts[1], parts[2]
                 tdir = topic_dir(tid)
                 if not tdir:
-                    return self.send_json({"error": "专题不存在"}, 404)
+                    return self.send_json({"error": "Topic not found"}, 404)
                 pdir = page_dir_of(tdir, page_id) if ID_RE.match(page_id) else None
                 if not pdir:
-                    return self.send_json({"error": "页面不存在"}, 404)
+                    return self.send_json({"error": "Page not found"}, 404)
                 if method == "GET":
                     return self.send_json(read_knowledge(tid, pdir))
                 if method == "PUT":
                     body = self.read_body()
                     if not isinstance(body, dict) or not isinstance(body.get("content"), str):
-                        return self.send_json({"error": "缺少文件内容 content"}, 400)
+                        return self.send_json({"error": "Missing the file content (content)"}, 400)
                     if not body["content"].strip():
-                        return self.send_json({"error": "内容不能为空；要删除页面请直接删除文件夹"}, 400)
+                        return self.send_json({"error": "The content can't be empty; to delete the page, delete its folder"}, 400)
                     base = body.get("base") if isinstance(body.get("base"), str) else None
                     status, payload = write_knowledge(pdir, body["content"], base)
                     return self.send_json(payload, status)
 
-            return self.send_json({"error": "未知接口"}, 404)
-        except Exception as e:  # 返回错误信息，方便在页面上看到原因
+            return self.send_json({"error": "Unknown endpoint"}, 404)
+        except Exception as e:  # return the error so the page can show the cause
             traceback.print_exc()
             return self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
 
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
-    # Windows 上 SO_REUSEADDR 会允许两个进程抢同一个端口，必须关闭
+    # On Windows SO_REUSEADDR lets two processes take the same port, so it must stay off
     allow_reuse_address = os.name != "nt"
 
 
 class PhoneHandler(ApiMixin, BaseHTTPRequestHandler):
-    """手机连接用的局域网端口：只提供手机接口和 App 安装包。"""
+    """The LAN port for phones: serves only the phone endpoints and the app package."""
 
     server_version = "Drillbook/2.0"
-    timeout = 15  # 空闲或很慢的连接不长期占着线程
+    timeout = 15  # idle or very slow connections don't hold a thread for long
 
     def log_message(self, fmt, *args):
         pass
@@ -1479,7 +1491,7 @@ class PhoneHandler(ApiMixin, BaseHTTPRequestHandler):
         super().end_headers()
 
     def ip_host(self) -> bool:
-        """只接受以 IP 地址访问：别的网站借 DNS 重绑定指向这台电脑时，Host 是它自己的域名。"""
+        """Accept only requests addressed by IP: when another site points at this computer through DNS rebinding, Host is its own domain."""
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
         if not host or host.lower() == "localhost":
             return True
@@ -1493,12 +1505,12 @@ class PhoneHandler(ApiMixin, BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if not self.ip_host():
-                return self.send_json({"error": "请用 IP 地址访问"}, 403)
+                return self.send_json({"error": "Connect using the IP address"}, 403)
             if method == "GET" and path == "/drillbook.apk":
                 return self.send_apk()
             parts = [unquote(p) for p in path.split("/")[2:] if p] if path.startswith("/api/") else []
             if not (parts and self.handle_phone(method, parts)):
-                self.send_json({"error": "未知接口"}, 404)
+                self.send_json({"error": "Unknown endpoint"}, 404)
         except Exception as e:
             traceback.print_exc()
             self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
@@ -1520,67 +1532,68 @@ def make_server(port: int) -> tuple[Server, int]:
             return Server(("127.0.0.1", p), Handler), p
         except OSError:
             continue
-    sys.exit(f"端口 {port}-{port + 19} 都被占用了，请用 --port 指定其他端口")
+    sys.exit(f"Ports {port}-{port + 19} are all in use; choose another port with --port")
 
 
 def run_check() -> int:
     dirs = [d for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)]
     if not dirs:
-        print(f"{TOPICS_REL}/ 下还没有专题。")
+        print(f"No topics in {TOPICS_REL}/ yet.")
         return 0
     errors = 0
     for d in sorted(dirs):
         p = load_topic(d)
         n_points = sum(len(pg["points"]) for pg in p["pages"])
         n_q = sum(len(pg["questions"]) for pg in p["pages"])
-        print(f"[{p['id']}] {p['name']}：{len(p['pages'])} 页，{n_points} 个知识点，{n_q} 道题")
+        print(f"[{p['id']}] {p['name']}: {plural(len(p['pages']), 'page')}, {plural(n_points, 'knowledge point')}, {plural(n_q, 'question')}")
         if not p["issues"]:
-            print("  没有发现问题")
+            print("  No problems found")
         for it in p["issues"]:
-            tag = "错误" if it["level"] == "error" else "提示"
+            tag = "error" if it["level"] == "error" else "warning"
             errors += it["level"] == "error"
-            print(f"  {tag}  {it['where']}：{it['msg']}")
+            print(f"  {tag}  {it['where']}: {it['msg']}")
     return 1 if errors else 0
 
 
 def run_outline() -> int:
-    """打印已有内容的结构，供人或 agent 判断新来源与已有专题的重叠、检查覆盖情况。"""
+    """Print the structure of the existing content, so a person or an agent can judge how a new source overlaps existing topics and check coverage."""
     dirs = [d for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)]
     if not dirs:
-        print(f"{TOPICS_REL}/ 下还没有专题。")
+        print(f"No topics in {TOPICS_REL}/ yet.")
         return 0
     topics = sorted((load_topic(d) for d in dirs), key=lambda p: (p["order"], p["name"]))
     for p in topics:
         n_points = sum(len(pg["points"]) for pg in p["pages"])
         n_q = sum(len(pg["questions"]) for pg in p["pages"])
         tags = " · ".join(x for x in (KIND_LABEL.get(p["kind"], p["kind"]), p["origin"]) if x)
-        tags = f"（{tags}）" if tags else ""
-        print(f"[{p['id']}] {p['name']}{tags}  {len(p['pages'])} 页 / {n_points} 个知识点 / {n_q} 道题  order={p['order']}")
+        tags = f" ({tags})" if tags else ""
+        print(f"[{p['id']}] {p['name']}{tags}  {plural(len(p['pages']), 'page')} / {plural(n_points, 'knowledge point')} / {plural(n_q, 'question')}  order={p['order']}")
         if p["description"]:
-            print(f"  说明：{p['description']}")
-        print(f"  来源：{p['path']}/{p['sourceFile']}" if p["source"] else "  来源：无")
+            print(f"  Description: {p['description']}")
+        print(f"  Source: {p['path']}/{p['sourceFile']}" if p["source"] else "  Source: none")
         mm = p["mindmap"]
-        print(f"  思维导图：{p['path']}/{MINDMAP_FILE}（{count_nodes(mm) - 1} 个节点）" if mm else "  思维导图：无")
+        print(f"  Mind map: {p['path']}/{MINDMAP_FILE} ({plural(count_nodes(mm) - 1, 'node')})" if mm else "  Mind map: none")
         for pg in p["pages"]:
             counts: dict[str, int] = {}
             for q in pg["questions"]:
                 for ref in q["points"]:
                     counts[ref] = counts.get(ref, 0) + 1
-            print(f"  {pg['dir']}  {pg['title']}  ({len(pg['questions'])} 题)")
+            print(f"  {pg['dir']}  {pg['title']}  ({plural(len(pg['questions']), 'question')})")
             for pt in pg["points"]:
-                print(f"    - {pt['id']}  {pt['title']}  [{counts.get(pt['id'], 0)} 题]")
+                print(f"    - {pt['id']}  {pt['title']}  [{plural(counts.get(pt['id'], 0), 'question')}]")
         if p["issues"]:
-            print(f"  另有 {len(p['issues'])} 项格式问题，运行 --check 查看")
+            n = len(p["issues"])
+            print(f"  {plural(n, 'more format issue')}; run --check to see {'it' if n == 1 else 'them'}")
         print()
     return 0
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Drillbook 本地服务")
-    ap.add_argument("--port", type=int, default=8765, help="端口，默认 8765")
-    ap.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
-    ap.add_argument("--check", action="store_true", help="只检查题库格式")
-    ap.add_argument("--outline", action="store_true", help="列出所有专题、页面和知识点")
+    ap = argparse.ArgumentParser(description="Drillbook local server")
+    ap.add_argument("--port", type=int, default=8765, help="port (default 8765)")
+    ap.add_argument("--no-browser", action="store_true", help="don't open the browser")
+    ap.add_argument("--check", action="store_true", help="only check the topic files")
+    ap.add_argument("--outline", action="store_true", help="list all topics, pages and knowledge points")
     args = ap.parse_args()
 
     if args.check:
@@ -1592,16 +1605,16 @@ def main() -> None:
     RECORDS_DIR.mkdir(parents=True, exist_ok=True)
     httpd, port = make_server(args.port)
     url = f"http://127.0.0.1:{port}/"
-    print(f"Drillbook 已启动：{url}")
-    print(f"题库目录：{TOPICS_DIR}")
-    print(f"作答记录：{RECORDS_DIR}")
+    print(f"Drillbook is running: {url}")
+    print(f"Topics folder: {TOPICS_DIR}")
+    print(f"Answer records: {RECORDS_DIR}")
     if link.config["enabled"]:
         if link.start():
-            where = "、".join(f"{ip}:{link.port}" for ip in lan_addresses()) or f"本机局域网地址:{link.port}"
-            print(f"手机连接：已开启，手机上填 {where}")
+            where = ", ".join(f"{ip}:{link.port}" for ip in lan_addresses()) or f"<this computer's LAN address>:{link.port}"
+            print(f"Phone connection: on; enter {where} on the phone")
         else:
-            print(f"手机连接：没能开启（{link.error}）")
-    print("关闭此窗口或按 Ctrl+C 停止服务。")
+            print(f"Phone connection: couldn't turn it on ({link.error})")
+    print("Close this window or press Ctrl+C to stop the server.")
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:

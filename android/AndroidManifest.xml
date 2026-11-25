@@ -4,7 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- allowBackup=false：数据只留在手机上，不随系统备份上传到云端 -->
+    <!-- allowBackup=false: the data stays on the phone and isn't uploaded to the cloud with system backups -->
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

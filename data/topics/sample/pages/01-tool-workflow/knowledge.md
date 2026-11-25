@@ -1,27 +1,27 @@
-# 工具与任务执行
+# Tools and Task Execution
 
-## 任务输入与完成条件 {#task-contract}
+## Task Inputs and Completion Criteria {#task-contract}
 
-**任务契约**（Task Contract）把用户的自然语言目标转成明确的输入、限制和完成条件（Completion Criteria）。Agent 能生成回答或发起工具调用（Tool Call），不代表已经完成业务任务；完成与否应由可检查的结果决定。
+A **task contract** turns the user's natural-language goal into explicit inputs, constraints and completion criteria. An agent that produces an answer or issues a tool call has not necessarily completed the business task; whether the task is done should be decided by results that can be checked.
 
-以「整理本周会议待办」为例，输入要明确会议记录、日期范围和输出位置；完成条件可以是每条待办都能回溯到原文，负责人不明时保留「待确认」，而不是自行补全。
+Take "compile this week's meeting action items" as an example: the inputs should specify the meeting notes, the date range and where the output goes; a completion criterion can be that every action item can be traced back to the source text, and that an unclear owner is kept as "to be confirmed" rather than filled in by the agent.
 
-| 契约要素 | 示例 |
+| Contract element | Example |
 | --- | --- |
-| 必要输入 | 会议记录与本周的起止日期 |
-| 输出约束 | 事项、负责人、截止日期和原文位置 |
-| 完成条件 | 必填字段齐全，未知信息被明确标注 |
-| 退出条件 | 输入缺失时请求补充，达到步数或时限后报告进度 |
+| Required inputs | The meeting notes and this week's start and end dates |
+| Output constraints | Item, owner, due date and source location |
+| Completion criteria | All required fields present, unknown information explicitly marked |
+| Exit conditions | Ask for more input when it is missing; report progress once the step or time limit is reached |
 
-缺失必要信息时，先澄清或给出带限制的部分结果；不要靠反复调用工具掩盖输入不完整。
+When required information is missing, first ask for clarification or return a partial result with its limitations stated; do not cover up incomplete input by calling tools over and over.
 
-> 面试回答：我会先定义输入、约束和可验证的完成条件，再让 Agent 规划步骤。输出了一段文字或发出一次调用都不代表成功；还要检查结果，并为缺失信息和预算耗尽设置退出方式。
+> Interview answer: I first define the inputs, constraints and verifiable completion criteria, and only then let the agent plan its steps. Producing a paragraph of text or issuing a call does not mean success; the result still has to be checked, and there must be exit paths for missing information and an exhausted budget.
 
-## 工具接口与结构化参数 {#tool-contract}
+## Tool Interfaces and Structured Parameters {#tool-contract}
 
-**工具契约**（Tool Contract）约定工具做什么、接受哪些参数、返回什么结果。模型提出调用请求，应用代码校验后执行工具，再把结果交回模型；生成了符合格式的参数，并不等于外部操作已经成功。
+A **tool contract** specifies what a tool does, which parameters it accepts and what result it returns. The model proposes a call, the application code validates it and executes the tool, and then hands the result back to the model; producing well-formed parameters does not mean the external operation has succeeded.
 
-参数可以用 JSON Schema 描述。下面是一个会议搜索接口的简化示例：
+Parameters can be described with JSON Schema. Here is a simplified example for a meeting search interface:
 
 ```json
 {
@@ -35,18 +35,18 @@
 }
 ```
 
-`properties` 描述字段约束，`required` 声明必填字段；字段出现在 `properties` 中并不会自动变成必填。应用还要验证业务含义，例如日期范围是否属于用户指定的那一周，并区分成功、无匹配和执行失败。结构定义参考 [JSON Schema 对象说明](https://json-schema.org/understanding-json-schema/reference/object)。
+`properties` describes the constraints on each field, and `required` declares the mandatory fields; a field that appears in `properties` does not automatically become required. The application must also validate the business meaning, for example whether the date range falls within the week the user specified, and must distinguish success, no match and execution failure. For the structure definitions, see the [JSON Schema reference on objects](https://json-schema.org/understanding-json-schema/reference/object).
 
-> 面试回答：工具描述要明确能力和输入输出。Schema 先检查类型、范围和必填项，业务规则再检查参数含义；执行后读取真实结果，不把模型提出的调用当作成功回执。
+> Interview answer: A tool description should state its capability, inputs and outputs explicitly. The schema first checks types, ranges and required fields, and business rules then check what the parameters mean; after execution, read the actual result instead of treating the call the model proposed as a success receipt.
 
-## 重试与幂等 {#retry-idempotency}
+## Retries and Idempotency {#retry-idempotency}
 
-**幂等性**（Idempotency）指同一逻辑操作重复执行时，对业务状态的影响与执行一次相同。网络超时只说明调用方没有及时收到结果，服务端可能已经完成操作；直接重试「新建待办」可能产生重复事项。
+**Idempotency** means that executing the same logical operation repeatedly has the same effect on business state as executing it once. A network timeout only tells the caller that it did not receive the result in time; the server may already have completed the operation, so simply retrying "create action item" can produce duplicate items.
 
-可为每个逻辑操作分配稳定的幂等键（Idempotency Key），由服务端保存键、参数摘要和执行结果。相同键与相同参数再次到达时复用结果；相同键却对应不同参数时，应报冲突。幂等需要服务端的去重与一致性保障，只在客户端带一个字符串并不能保证效果。
+Each logical operation can be assigned a stable idempotency key, and the server stores the key, a digest of the parameters and the execution result. When the same key arrives again with the same parameters, the stored result is reused; when the same key comes with different parameters, a conflict should be reported. Idempotency requires deduplication and consistency guarantees on the server side; merely having the client send a string does not guarantee anything.
 
-- 临时网络故障可在次数和时限内重试，通常加入退避（Backoff）与随机抖动（Jitter），避免集中重试。
-- 参数不合法应先修正输入；重试同样的错误参数通常没有帮助。
-- 状态不明的写操作，先用操作标识查询结果，再决定重试或转交处理。
+- Transient network failures can be retried within limits on the number of attempts and the time spent, usually with backoff and random jitter so that retries do not pile up at the same moment.
+- Invalid parameters call for fixing the input first; retrying with the same bad parameters usually does not help.
+- For a write operation whose status is unknown, first query the result by its operation ID, then decide whether to retry or hand it over for handling.
 
-> 面试回答：超时不等于失败。写操作要用稳定的幂等键和服务端去重，必要时先查询状态；重试则区分临时故障与参数错误，并限制次数和时限。
+> Interview answer: A timeout is not the same as a failure. Write operations need a stable idempotency key and server-side deduplication, and the status should be queried first when necessary; retries should distinguish transient failures from parameter errors and be limited in number and time.

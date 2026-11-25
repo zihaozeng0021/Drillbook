@@ -1,8 +1,10 @@
-// 专题内的外框：左侧导航（总览、思维导图、页面列表、错题复习），右侧内容区
+// The frame inside a topic: left navigation (Overview, Mind map, page list, Review) and the content area on the right
 
 import { h, icon, logo, stateBar, kindLabel } from '../ui.js';
 import * as store from '../store.js';
 import { NotesPanel } from './notes.js';
+
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
 export class Shell {
   constructor(app, topic) {
@@ -10,13 +12,13 @@ export class Shell {
     this.topic = topic;
     this.active = { name: 'overview', pageId: null };
 
-    this.nav = h('nav', { class: 'side-nav', 'aria-label': '页面' });
+    this.nav = h('nav', { class: 'side-nav', 'aria-label': 'Pages' });
     this.sync = h('div', { class: 'side-sync' });
     const subline = [kindLabel(topic.kind), topic.origin].filter(Boolean).join(' · ');
     this.side = h(
       'aside',
       { class: 'side' },
-      h('a', { class: 'brand', href: '#/' }, logo(), h('span', null, '全部专题')),
+      h('a', { class: 'brand', href: '#/' }, logo(), h('span', null, 'All topics')),
       h(
         'a',
         { class: 'side-topic', href: `#/p/${encodeURIComponent(topic.id)}` },
@@ -31,7 +33,7 @@ export class Shell {
     this.top = h(
       'header',
       { class: 'topbar' },
-      h('button', { class: 'icon-btn', 'aria-label': '打开导航', onclick: () => this.openDrawer() }, icon('menu')),
+      h('button', { class: 'icon-btn', 'aria-label': 'Open navigation', onclick: () => this.openDrawer() }, icon('menu')),
       h('span', { class: 'topbar-title' }, topic.name),
     );
     this.root = h('div', { class: 'shell' }, this.top, this.side, this.scrim, this.main);
@@ -62,7 +64,7 @@ export class Shell {
         'a',
         { class: `nav-item${name === 'overview' ? ' active' : ''}`, href: base },
         icon('grid'),
-        h('span', { class: 't' }, '总览'),
+        h('span', { class: 't' }, 'Overview'),
       ),
     ];
     if (topic.mindmap) {
@@ -71,7 +73,7 @@ export class Shell {
           'a',
           { class: `nav-item${name === 'map' ? ' active' : ''}`, href: `${base}/map` },
           icon('map'),
-          h('span', { class: 't' }, '思维导图'),
+          h('span', { class: 't' }, 'Mind map'),
         ),
       );
     }
@@ -97,8 +99,8 @@ export class Shell {
         'a',
         { class: `nav-item${name === 'review' ? ' active' : ''}`, href: `${base}/review` },
         icon('review'),
-        h('span', { class: 't' }, '错题复习'),
-        all.weak ? h('span', { class: 'badge', 'data-tip': `${all.weak} 道薄弱题` }, all.weak) : null,
+        h('span', { class: 't' }, 'Review'),
+        all.weak ? h('span', { class: 'badge', 'data-tip': plural(all.weak, 'weak question') }, all.weak) : null,
       ),
     );
     this.nav.replaceChildren(...items);
@@ -115,7 +117,7 @@ export class Shell {
         'div',
         { class: 'sync-warn' },
         icon('warn'),
-        h('span', null, `${n} 条作答记录还没写入文件`),
+        h('span', null, `${plural(n, 'answer record')} not written to file yet`),
         h(
           'button',
           {
@@ -125,7 +127,7 @@ export class Shell {
               if (!ok) this.sync.querySelector('.sync-warn')?.classList.add('shake');
             },
           },
-          '重试',
+          'Retry',
         ),
       ),
     );

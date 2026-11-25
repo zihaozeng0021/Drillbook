@@ -1,6 +1,6 @@
 /* ==========================================================================
-   Drillbook · 样式
-   颜色只用来表达数据：薄弱 / 一般 / 掌握 / 未做；操作色为浅天蓝
+   Drillbook · Styles
+   Color is used only to show data: Weak / Fair / Mastered / New; the action color is light sky blue
    ========================================================================== */
 
 :root {
@@ -39,7 +39,7 @@
   --font-code: "Cascadia Code", "Cascadia Mono", "JetBrains Mono", Consolas, "SF Mono", Menlo, monospace;
 }
 
-/* ── 基础 ─────────────────────────────────────────────────────────────── */
+/* ── Base ─────────────────────────────────────────────────────────────── */
 
 *,
 *::before,
@@ -102,8 +102,8 @@ select {
   outline-offset: 2px;
 }
 
-/* 滚动条：细、圆角、轨道透明，颜色跟深色底一致；拖动时用操作色。
-   只在鼠标 / 触控板设备上自定义，触屏保留系统自动隐藏的滚动条 */
+/* Scrollbars: thin, rounded, transparent track, colors matching the dark background; the action color while dragging.
+   Customized only on mouse / touchpad devices; touch screens keep the system's auto-hiding scrollbars */
 @media (hover: hover) and (pointer: fine) {
   ::-webkit-scrollbar {
     width: 12px;
@@ -139,7 +139,7 @@ select {
   }
 }
 
-/* 不支持 ::-webkit-scrollbar 的浏览器（Firefox）用标准属性 */
+/* Browsers without ::-webkit-scrollbar (Firefox) use the standard properties */
 @supports not selector(::-webkit-scrollbar) {
   * {
     scrollbar-width: thin;
@@ -177,7 +177,7 @@ select {
   min-height: 100vh;
 }
 
-/* ── 图标与按钮 ───────────────────────────────────────────────────────── */
+/* ── Icons and buttons ────────────────────────────────────────────────── */
 
 .ico {
   display: inline-block;
@@ -341,7 +341,7 @@ select {
   text-underline-offset: 3px;
 }
 
-/* ── 题目方格（全局统一的数据单元） ───────────────────────────────────── */
+/* ── Question cells (the site-wide data unit) ─────────────────────────── */
 
 .cells {
   display: flex;
@@ -462,7 +462,7 @@ select {
   color: var(--text-3);
 }
 
-/* ── 外框与侧栏 ───────────────────────────────────────────────────────── */
+/* ── Shell and sidebar ────────────────────────────────────────────────── */
 
 .shell {
   display: grid;
@@ -628,7 +628,7 @@ select {
   display: none;
 }
 
-/* ── 通用面板 ─────────────────────────────────────────────────────────── */
+/* ── Shared panels ────────────────────────────────────────────────────── */
 
 .panel {
   border: 1px solid var(--line);
@@ -688,7 +688,7 @@ select {
   color: var(--text-2);
 }
 
-/* ── 专题列表 ─────────────────────────────────────────────────────────── */
+/* ── Topic list ───────────────────────────────────────────────────────── */
 
 .home {
   max-width: 1080px;
@@ -752,7 +752,7 @@ select {
   font-size: 14px;
 }
 
-/* 专题类型标签（岗位 / 书 / 课程 / 考试）：中性边框，不占用状态色 */
+/* Topic kind tag (Job / Book / Course / Exam): neutral border, uses none of the state colors */
 .kind-tag {
   display: inline-flex;
   align-items: center;
@@ -811,7 +811,8 @@ select {
   height: 10px;
 }
 
-/* 拖动排序：按住专题拖到新位置（触屏上先长按）；文字不可选，免得拖动时选中文字或拖出链接 */
+/* Drag sorting: press a topic and drag it to a new position (long-press first on touch screens); text isn't selectable,
+   so dragging doesn't select text or drag the link out */
 .topic-row {
   -webkit-user-select: none;
   user-select: none;
@@ -845,7 +846,7 @@ html.is-sorting * {
   cursor: grabbing !important;
 }
 
-/* ── 专题总览 ─────────────────────────────────────────────────────────── */
+/* ── Topic overview ───────────────────────────────────────────────────── */
 
 .overview {
   max-width: 1120px;
@@ -1111,7 +1112,7 @@ html.is-sorting * {
   font-size: 12px;
 }
 
-/* ── 页面：标题与标签 ─────────────────────────────────────────────────── */
+/* ── Page: title and tabs ─────────────────────────────────────────────── */
 
 .page {
   max-width: 1080px;
@@ -1250,7 +1251,7 @@ html.is-sorting * {
   padding-top: 30px;
 }
 
-/* ── 知识点 ───────────────────────────────────────────────────────────── */
+/* ── Knowledge points ─────────────────────────────────────────────────── */
 
 .kn-layout {
   display: grid;
@@ -1376,7 +1377,7 @@ html.is-sorting * {
   box-shadow: inset 0 0 0 1px var(--new-line);
 }
 
-/* ── Markdown 正文 ────────────────────────────────────────────────────── */
+/* ── Markdown body ────────────────────────────────────────────────────── */
 
 .md {
   font-size: 15px;
@@ -1559,7 +1560,7 @@ html.is-sorting * {
   font-size: 1.08em;
 }
 
-/* 代码高亮（与界面同色系的柔和配色，避免和状态色混淆） */
+/* Code highlighting (soft colors from the same palette as the UI, so they aren't confused with the state colors) */
 .hljs-comment,
 .hljs-quote {
   color: #5e7193;
@@ -1613,7 +1614,7 @@ html.is-sorting * {
   color: #ff9aa9;
 }
 
-/* ── 答题 ─────────────────────────────────────────────────────────────── */
+/* ── Quiz ─────────────────────────────────────────────────────────────── */
 
 .quiz {
   max-width: 800px;
@@ -2056,7 +2057,7 @@ html.is-sorting * {
   background: linear-gradient(to bottom, rgba(13, 21, 36, 0), var(--bg) 35%);
 }
 
-/* ── 小结 ─────────────────────────────────────────────────────────────── */
+/* ── Summary ──────────────────────────────────────────────────────────── */
 
 .summary {
   max-width: 800px;
@@ -2185,7 +2186,7 @@ html.is-sorting * {
   margin-top: 28px;
 }
 
-/* ── 错题复习 ─────────────────────────────────────────────────────────── */
+/* ── Review ───────────────────────────────────────────────────────────── */
 
 .review {
   max-width: 1120px;
@@ -2527,7 +2528,7 @@ button.rrow:hover {
   margin-top: 24px;
 }
 
-/* ── 页面笔记 ─────────────────────────────────────────────────────────── */
+/* ── Page notes ───────────────────────────────────────────────────────── */
 
 :root {
   --notes-w: clamp(360px, 30vw, 540px);
@@ -2719,7 +2720,7 @@ button.rrow:hover {
   flex: none;
 }
 
-/* 宽屏：笔记停靠在右侧，正文让出位置；窄一些时浮在内容上方 */
+/* Wide screens: notes dock on the right and the body makes room; on narrower screens they float over the content */
 @media (min-width: 1281px) {
   .shell.notes-open .main {
     padding-right: calc(var(--notes-w) + 40px);
@@ -2741,7 +2742,7 @@ button.rrow:hover {
   }
 }
 
-/* ── 提示框、对话框、通知 ─────────────────────────────────────────────── */
+/* ── Tooltips, dialogs, toasts ────────────────────────────────────────── */
 
 .tip {
   position: fixed;
@@ -2839,7 +2840,7 @@ button.rrow:hover {
   animation: nudge 0.28s ease-in-out;
 }
 
-/* ── 连接手机（电脑上的对话框）与连接电脑（安卓 App） ─────────────────── */
+/* ── Connect phone (computer dialog) and Connect to computer (app) ────── */
 
 .home-phone {
   margin-left: auto;
@@ -2994,7 +2995,7 @@ button.rrow:hover {
   background: var(--bg-deep);
   color: var(--text);
   font: inherit;
-  font-size: 16px; /* 手机上小于 16px 时，点输入框会自动放大页面 */
+  font-size: 16px; /* on phones, below 16px tapping the input zooms the page in */
 }
 
 .field input:focus {
@@ -3074,7 +3075,7 @@ button.rrow:hover {
   gap: 8px;
 }
 
-/* ── 窄屏 ─────────────────────────────────────────────────────────────── */
+/* ── Narrow screens ───────────────────────────────────────────────────── */
 
 @media (max-width: 1180px) {
   .kn-layout {
@@ -3263,7 +3264,7 @@ button.rrow:hover {
   }
 }
 
-/* ── 知识点文件编辑器 ───────────────────────────────────────────────────── */
+/* ── Knowledge file editor ────────────────────────────────────────────── */
 
 .pg-tools {
   display: flex;
@@ -3383,7 +3384,7 @@ button.rrow:hover {
   line-height: 1.7;
 }
 
-/* ── 思维导图 ─────────────────────────────────────────────────────────── */
+/* ── Mind map ─────────────────────────────────────────────────────────── */
 
 .mm-head {
   display: flex;
@@ -3460,7 +3461,7 @@ button.rrow:hover {
   display: none;
 }
 
-/* 导图：填满窗口，在面板里上下左右滚动 */
+/* Map view: fills the window and scrolls in every direction inside the panel */
 .mindmap.map {
   display: flex;
   flex-direction: column;
@@ -3495,7 +3496,7 @@ button.rrow:hover {
 
 .mm-tree {
   position: relative;
-  margin: auto 0; /* 比视野矮时上下居中，比视野高时从顶部开始 */
+  margin: auto 0; /* centered vertically when shorter than the view, starts at the top when taller */
 }
 
 .mm-links {
@@ -3744,7 +3745,7 @@ button.rrow:hover {
   animation: mm-flash 1.8s ease-out;
 }
 
-/* 大纲：缩进的树，随页面滚动；连线用边框画 */
+/* Outline view: an indented tree that scrolls with the page; the connecting lines are drawn with borders */
 .mindmap.outline .mm-canvas {
   display: block;
   width: auto;
@@ -3768,7 +3769,7 @@ button.rrow:hover {
 }
 
 .mindmap.outline .mm-kids > .mm-node {
-  --mid: 12.4px; /* 节点第一行的中线到节点顶部的距离，连线的拐角对准它 */
+  --mid: 12.4px; /* distance from the top of the node to the midline of its first line; the corner of the connecting line aligns with it */
   position: relative;
   padding: 2px 0 2px 20px;
 }

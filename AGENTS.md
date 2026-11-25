@@ -1,296 +1,298 @@
 # AGENTS.md
 
-写给在这个仓库里工作的 AI agent。
+For AI agents working in this repository.
 
-这是一个在本机运行的学习复习网站：`server.py`（只用 Python 标准库）读取 `data/` 下的文件，`web/` 是纯前端页面。网站内容按「专题 → 页面 → 知识点 → 选择题」组织，每个专题另有一份思维导图（`mindmap.md`）概括全部知识点，全部是普通文件。
+This is a study and review site that runs on your own computer: `server.py` (Python standard library only) reads the files under `data/`, and `web/` is a plain front end. Content is organized as **topic → page → knowledge point → multiple-choice question**; each topic also has a mind map (`mindmap.md`) that summarizes all of its knowledge points. Everything is plain files.
 
-一个**专题**是一条学习路线，由一份或几份**来源**生成。来源可以是一个岗位的 JD、一本书、一门课的课件或大纲、一份考试大纲，也可以是用户自己描述的学习目标。几份高度重叠的来源可以合并进同一个专题，也可以各建一个专题，由用户决定（见「二、重叠分析与授权」）。
+A **topic** is a learning path generated from one or more **sources**. A source can be the job description (JD) for a role, a book, a course's slides or syllabus, an exam syllabus, or a learning goal the user describes. Several heavily overlapping sources can be merged into one topic or get a topic each; the user decides (see "II. Overlap analysis and authorization").
 
-**最常见的任务：用户发来一份来源，你为它生成知识点、选择题和思维导图，写进 `data/topics/`。** 按下面的流程做。流程里只有一处需要用户参与：用户没有说明内容放在哪里、而站内已有同类或重叠的专题时，先把分析和建议发给用户，等用户决定合并还是新建，再动手写（见「二、重叠分析与授权」）。其余步骤不需要再问用户。
+**The most common task: the user sends a source, and you generate knowledge points, questions and a mind map for it under `data/topics/`.** Follow the workflow below. The user is involved at only one point: if they haven't said where the content should go and the site already has a similar or overlapping topic, send them your analysis and recommendation first, and wait for them to choose between merging and a new topic before you write anything (see "II. Overlap analysis and authorization"). No other step needs the user.
 
-## 硬规则
+## Hard rules
 
-无论做什么任务都要遵守：
+Whatever the task:
 
-1. 不改 `data/records/`、`data/notes/`、`server.py`、`web/`、`android/`、`start.bat`，不碰 `.local/`；只有用户明确要求改网站时才动代码。
-2. 不改任何已有的专题 id、页面 id、知识点 id、题目 id，作答记录和笔记靠它们关联。
-3. 用户没有说明内容放在哪里、而站内有同类或重叠的专题时，先问用户，等用户决定后再写文件。
-4. 每道题考理解和运用，不出年份、提出者、论文名、版本号、编号这类背诵题。
-5. 一次写一页，写完先自查、再运行 `--check`，修好再写下一页。
+1. Don't modify `data/records/`, `data/notes/`, `server.py`, `web/`, `android/` or `start.bat`, and don't touch `.local/`; change code only when the user explicitly asks you to change the site.
+2. Never change an existing topic id, page id, knowledge point id or question id: answer records and notes are linked through them.
+3. If the user hasn't said where content should go and the site has a similar or overlapping topic, ask first, and write files only after the user decides.
+4. Every question tests understanding and application; no recall questions about years, who proposed something, paper titles, version numbers or item numbers.
+5. Write one page at a time: after each page, self-review and run `--check`, and fix everything before starting the next page.
 
-## Sample 示例专题
+## Sample topic
 
-`data/topics/sample/` 是 AI Agent 开发的演示专题，只用来展示格式，不参与真实来源的重叠分析。加入第一个真实专题时删掉它，连同只属于示例的 `data/records/sample.jsonl` 和 `data/notes/sample/`（如果存在）。
+`data/topics/sample/` is a demo topic on AI agent development. It only shows the format and takes no part in overlap analysis against real sources. When you add the first real topic, delete it, together with the sample-only `data/records/sample.jsonl` and `data/notes/sample/` (if they exist).
 
-## 速查
+## Quick reference
 
-| 项 | 说明 |
+| Item | Details |
 | --- | --- |
-| 内容写在哪 | `data/topics/<专题id>/` |
-| 生成内容时不要改 | `data/records/`（作答记录）、`data/notes/`（用户笔记）、`server.py`、`web/`、`android/`、`start.bat`、`.local/`（本机配置与密钥） |
-| 思维导图 | `data/topics/<专题id>/mindmap.md`：页面都写完后生成；页面或知识点有增减时同步更新 |
-| 盘点已有内容 | `python server.py --outline`：所有专题 → 页面 → 知识点，每个知识点有几道题，以及有没有思维导图 |
-| 校验 | `python server.py --check`：格式错误和覆盖提示；有「错误」时退出码为 1 |
-| 生效方式 | 不用重启服务，用户刷新浏览器即可看到 |
+| Where content goes | `data/topics/<topic-id>/` |
+| Don't modify when generating content | `data/records/` (answer records), `data/notes/` (user notes), `server.py`, `web/`, `android/`, `start.bat`, `.local/` (local config and keys) |
+| Mind map | `data/topics/<topic-id>/mindmap.md`: generate it after all pages are written; update it when pages or knowledge points are added or removed |
+| Inventory existing content | `python server.py --outline`: every topic → page → knowledge point, how many questions each knowledge point has, and whether the topic has a mind map |
+| Validate | `python server.py --check`: format errors and coverage warnings; exits with code 1 if there is any `error` |
+| Taking effect | No restart needed; the user just refreshes the browser |
 
-命令里的 `python` 按环境换成 `python3`（macOS / Linux）或 `py -3`（Windows）。
+Replace `python` with `python3` (macOS / Linux) or `py -3` (Windows) as appropriate.
 
-## 一、工作流程
+## I. Workflow
 
-### 1. 读懂输入
+### 1. Understand the input
 
-来源的类型，以及用户可能附带的要求：
+Source types, and what the user may add:
 
-| 类型 | 用户可能给的 | 常附带的要求 |
+| Type | The user may give | Common extra requirements |
 | --- | --- | --- |
-| 岗位 | JD 全文、只有岗位名、招聘链接 | 面试级别（实习 / 校招 / 社招 / 资深）、侧重方向、面试语言 |
-| 书 | 书名（版次、作者）、目录、某几章、整本书的文件 | 读书目的（面试 / 考试 / 自学）、只看哪几章、深度 |
-| 课程 | 课件（PDF / PPT）、讲义、大纲、公开课链接 | 学期、哪几讲、考试范围 |
-| 其他 | 考试大纲、认证考纲、一组论文、用户自己列的学习目标 | 按最接近的类型处理 |
+| Job | Full JD, only the job title, a job-posting link | Level (intern / new grad / experienced / senior), focus areas, interview language |
+| Book | Title (edition, author), table of contents, some chapters, the whole book as a file | Purpose (interview / exam / self-study), which chapters, depth |
+| Course | Slides (PDF / PPT), lecture notes, syllabus, link to an open course | Term, which lectures, exam scope |
+| Other | Exam syllabus, certification outline, a set of papers, the user's own list of learning goals | Treat as the closest type |
 
-- 给了链接：能联网就打开读取；不能联网就请用户粘贴正文。
-- 给了文件：用你的文件读取能力读。整本书或整套课件很长时，先读目录和每章（每讲）开头确定结构，再按章节分段读；不要只读开头就推断全书。
-- 只有名字：岗位按业内对这个岗位的通常要求推断；书按公认的目录和内容推断；课程按通常的大纲推断。汇报里说明是推断的。拿不准书或课的章节时，不要编造章节名和页码。
-- 一次给了多份来源：逐份处理；处理后一份时，把前一份的结果也算作「已有专题」。
-- 用户明确说了放在哪里：照用户说的做，不再询问（哪些算「说了」见「二、1」）。
+- A link: open and read it if you can go online; otherwise ask the user to paste the text.
+- A file: read it with your file-reading tools. For a long book or a full set of slides, first read the table of contents and the start of each chapter (lecture) to settle the structure, then read it chapter by chapter; don't infer the whole book from its opening.
+- Only a name: for a job, infer what such a role usually requires; for a book, use its well-known table of contents and content; for a course, use a typical syllabus. Say in your report that it was inferred. If you are not sure of a book's or course's chapters, don't invent chapter titles or page numbers.
+- Several sources at once: handle them one at a time; when handling the next one, count the result of the previous one as an existing topic.
+- The user said where it goes: do as they say, without asking (what counts as "said" is in "II.1").
 
-### 2. 盘点已有内容
+### 2. Inventory existing content
 
-1. 运行 `python server.py --outline`。
-2. 读每个专题的 `topic.json` 和 `source.md`，弄清它的类型（`kind`）、出处和覆盖范围。
-3. 需要判断某个主题讲到多深时，再打开对应页面的 `knowledge.md`。
+1. Run `python server.py --outline`.
+2. Read each topic's `topic.json` and `source.md` to learn its type (`kind`), origin and coverage.
+3. When you need to judge how deep a subject goes, open that page's `knowledge.md`.
 
-### 3. 把来源拆成知识清单
+### 3. Break the source down into a knowledge list
 
-- **默认只提取核心知识点。** 岗位：任职要求和职责里明确写的，加上这个岗位面试默认会问、但 JD 没写的基础（例如 AI 岗的 Transformer 与注意力机制，后端岗的网络与数据库）。书：每章的中心概念、机制和方法。课程：每讲的主题，以及作业、考试涉及的概念。细枝末节和仅供了解的内容默认不收。
-- 用户对范围或粒度有说明时，按用户说的提取，例如「每节都要」「只要考试范围」「越细越好」「只做第 3–5 章」「侧重 X」；用户说了侧重的部分提取得更细。
-- 书：按书自己的章、节划分——一章（或一个部分）对应一页，一节对应一个知识点，知识点标题沿用书里的节名并带节号（如「3.2 进程调度」），这样每个知识点对应原书的哪里不言自明，不用另外标注。节太细或太多时，把相邻几节合成一个知识点，标题写成「3.2–3.4 进程调度与同步」。保留书的顺序和术语；跳过前言、致谢和与主题无关的章节；书里一笔带过、但理解后文必需的前置知识，可以补一个知识点并注明是补充的。
-- 课程：按讲次划分——一讲（或相邻几讲）对应一页，一讲里的几个主题各成一个知识点，标题带讲次（如「L5 Raft 领导者选举」）；以课件、讲义、作业涉及的概念为主，有考试范围的以考试范围优先。
-- 深度：岗位按面试级别——实习 / 校招多考基础和原理，社招 / 资深多考取舍、设计和排错。书和课程按来源本身讲到的深度，不明显超出，除非用户要求。
-- 不收任何不是知识点的内容：行为面试与 HR 问题、公司八卦、无法核实的公司内部信息、书的出版信息和作者生平、课程的考勤和评分比例等行政信息。
-### 4. 分析与已有专题的重叠，必要时取得用户授权
+- **By default, extract only core knowledge points.** Job: what the requirements and responsibilities state explicitly, plus the fundamentals that interviews for this role ask by default even when the JD doesn't mention them (e.g. Transformers and attention for AI roles, networking and databases for backend roles). Book: each chapter's central concepts, mechanisms and methods. Course: each lecture's topics, plus the concepts covered by assignments and exams. Minor details and nice-to-know material are left out by default.
+- When the user specifies scope or granularity, follow it, e.g. "every section", "exam scope only", "as detailed as possible", "chapters 3–5 only", "focus on X"; extract the parts they want to focus on in more detail.
+- Book: follow the book's own chapters and sections — one chapter (or part) per page, one section per knowledge point. Knowledge point titles keep the section name and number (e.g. "3.2 Process Scheduling"), so it's obvious where each knowledge point comes from without extra notes. When sections are too fine or too many, merge adjacent ones into one knowledge point titled e.g. "3.2–3.4 Process Scheduling and Synchronization". Keep the book's order and terminology; skip the preface, acknowledgments and chapters unrelated to the subject. When the book only touches on a prerequisite that later material depends on, you may add a knowledge point for it and say that it is supplementary.
+- Course: follow the lectures — one lecture (or a few adjacent lectures) per page, each topic within a lecture its own knowledge point, titles prefixed with the lecture number (e.g. "L5 Raft Leader Election"). Base it on the concepts in the slides, notes and assignments; when there is an exam scope, it takes priority.
+- Depth: jobs follow the interview level — intern and new-grad interviews test fundamentals and principles; experienced and senior ones test trade-offs, design and troubleshooting. Books and courses follow the depth of the source itself, not clearly beyond it unless the user asks.
+- Leave out anything that is not knowledge: behavioral and HR questions, company gossip, unverifiable internal company information, a book's publication details and the author's biography, a course's attendance, grading weights and other administration.
 
-按「二、重叠分析与授权」做。结果是四种之一：**归入**已有专题、**扩展**已有专题、**新建**专题，或者**先问用户**。这一步决定写多少、写在哪里，不能跳过；只有用户已经指定了位置、或与所有已有专题都没有明显重叠时，才可以不问直接做。
+### 4. Analyze overlap with existing topics; get the user's decision if needed
 
-### 5. 规划页面
+Follow "II. Overlap analysis and authorization". The outcome is one of four: **fold into** an existing topic, **extend** an existing topic, create a **new** topic, or **ask the user first**. This step decides how much to write and where; don't skip it. You may go ahead without asking only when the user has already said where the content goes, or when it has no significant overlap with any existing topic.
 
-- 一页是一个连贯的主题领域：岗位专题的一个方向，书的一章（或一个部分），课程的一讲（或相邻几讲）。页数和每页的知识点数由来源决定，不预设上限。
-- 顺序按来源类型：
-  - 岗位：基础 → 核心机制 → 工程实践 → 场景与设计。最后一页通常是「场景与设计」：知识点写分析思路和设计要点，题目用综合场景来考。
-  - 书：按章节顺序，一章一页；短章合并，长章拆分。跳过了章节、网站序号和章号对不上时，在页面导语里写一句「对应原书第 N 章」。
-  - 课程：按讲次顺序，相邻几讲合并成一页。
-- 页面标题简短（一般不超过 12 个字），不带序号——序号由网站显示。书和课程的页面标题可以沿用章名或讲名，去掉「第 N 章」「Lecture N」。
-- 动手之前先在对话里列出计划：重叠分析的结论（以及用户的决定）；要新建或扩展的页面（序号、页面 id、标题、各知识点标题）。不属于「先问用户」的情况时，列完直接开始写，不必等用户回复。
-### 6. 逐页生成
+### 5. Plan the pages
 
-- 一次只完成一页：写 `knowledge.md` → 写 `questions.json` → 自查 → 运行 `--check` → 修好再写下一页。不要一口气生成整个专题再统一检查。
-- 自查是通读本页全部题目，逐题确认：答案唯一且站得住、干扰项来自真实误解、题干不泄露答案、不依赖选项位置、不是背诵题；再看本页正确答案的位置是否分散、多选是否占 25%–40%。
-- 能用子 agent 并行时可以按页面分工，但页面清单和每页的知识点标题要先定好；重叠分析和最后的整体校验由你负责。
-- 用你自带的文件写入工具写文件。必须用脚本写时显式指定 UTF-8（无 BOM）；不要用 Windows PowerShell 的 `>` 或 `Set-Content` 的默认编码。
-- `questions.json` 是标准 JSON：不能有注释和尾逗号；字符串里的换行写 `\n`，双引号写 `\"`，反斜杠写 `\\`。所以 LaTeX 公式里的 `\frac` 在 JSON 中要写成 `\\frac`。
+- A page is one coherent subject area: one direction of a job topic, one chapter (or part) of a book, one lecture (or a few adjacent lectures) of a course. The number of pages, and of knowledge points per page, follows from the source; there is no preset limit.
+- Order by source type:
+  - Job: fundamentals → core mechanisms → engineering practice → scenarios and design. The last page is usually "Scenario Design": its knowledge points give analysis approaches and design essentials, and its questions use integrated scenarios.
+  - Book: chapter order, one chapter per page; merge short chapters, split long ones. If chapters are skipped and the site's page numbers no longer match the chapter numbers, add a line to the page lead such as "Corresponds to Chapter N of the book."
+  - Course: lecture order, merging adjacent lectures into one page where it makes sense.
+- Page titles are short (usually at most about 5 words, or 12 Chinese characters) and unnumbered — the site shows the numbers. Book and course page titles can reuse the chapter or lecture name without "Chapter N" or "Lecture N".
+- Before writing, list the plan in the conversation: the overlap conclusion (and the user's decision); the pages to create or extend (number, page id, title, and the titles of their knowledge points). Unless this is an "ask the user first" case, start writing right after listing it, without waiting for a reply.
 
-### 7. 生成或更新思维导图
+### 6. Generate page by page
 
-- 全部页面写完、`--check` 通过之后，写 `mindmap.md`（格式见「三、文件格式」，标准见「四、内容标准」）。它概括已经写好的知识点，所以放在最后。
-- 往已有专题里加页面或知识点时（归入、扩展、补充），把新内容加进 `mindmap.md` 相应的位置。只改了知识点或页面标题时不用动它：关联节点自动显示新标题。
-- 已有专题还没有思维导图、用户要你补上时，只做这一步：读完各页的 `knowledge.md`，按标准写 `mindmap.md`，不动其他文件。
-- 页面多时可以按页面分给子 agent 起草要点，但分组和页面顺序要先定好；合并后由你通读，统一长度和写法。
+- Finish one page at a time: write `knowledge.md` → write `questions.json` → self-review → run `--check` → fix → next page. Don't generate a whole topic and check it all at the end.
+- Self-review means reading all of the page's questions and confirming for each one that the answer is unique and sound, the distractors come from real misconceptions, the stem doesn't give the answer away, nothing depends on option positions, and it is not a recall question; then check that the page's correct answers are spread across positions and that multiple-answer questions make up 25%–40%.
+- If you can run subagents in parallel, you may split the work by page, but fix the page list and every page's knowledge point titles first; you stay responsible for the overlap analysis and the final overall check.
+- Write files with your built-in file-writing tool. If you must use a script, specify UTF-8 (no BOM) explicitly; don't rely on the default encodings of Windows PowerShell's `>` or `Set-Content`.
+- `questions.json` is standard JSON: no comments and no trailing commas; inside strings, write newlines as `\n`, double quotes as `\"` and backslashes as `\\`. So LaTeX `\frac` is written `\\frac` in JSON.
 
-### 8. 校验
+### 7. Generate or update the mind map
 
-- `python server.py --check`：不能有「错误」，也不能有「还没有对应的题目」「没有关联任何知识点」「缺少解析」这几类提示，以及 `mindmap.md` 的提示（漏掉或重复的知识点、找不到的页面或知识点）。
-- `python server.py --outline`：确认结构正确，每个知识点至少 2 道题，专题有思维导图。
-- 环境里运行不了 Python 时，按「三、文件格式」逐项手动核对，并在汇报里说明没能运行校验。
+- After all pages are written and `--check` passes, write `mindmap.md` (format in "III. File formats", standards in "IV. Content standards"). It summarizes the knowledge points already written, so it comes last.
+- When you add pages or knowledge points to an existing topic (folding in, extending, supplementing), add the new content at the right place in `mindmap.md`. Renaming a knowledge point or page doesn't require touching it: linked nodes show the new title automatically.
+- If an existing topic has no mind map yet and the user asks for one, do only this step: read every page's `knowledge.md`, write `mindmap.md` to the standard, and change no other file.
+- With many pages, you may have subagents draft the bullets page by page, but fix the grouping and page order first; after merging, read the whole map yourself and even out length and style.
 
-### 9. 汇报
+### 8. Validate
 
-用几行话告诉用户：
+- `python server.py --check`: no `error` lines, and none of these warnings: `has no questions yet`, `Not linked to any knowledge point`, `Missing explanation`, nor any `mindmap.md` warning (knowledge points missing from or repeated in the map, pages or knowledge points that can't be found).
+- `python server.py --outline`: confirm that the structure is right, every knowledge point has at least 2 questions, and the topic has a mind map.
+- If you can't run Python in your environment, check everything in "III. File formats" by hand and say in your report that validation couldn't be run.
 
-- 重叠分析的结论和依据（新建了专题 / 扩展或归入了哪个专题；用户做过选择的，写明是按用户的选择做的）
-- 新增或修改了哪些页面，知识点和题目各多少；思维导图新建或更新了哪些分支
-- 做了哪些推断、省略了什么（例如从略的章节）
-- 刷新浏览器即可看到
+### 9. Report
 
-## 二、重叠分析与授权
+Tell the user in a few lines:
 
-**原则一：一个专题内不重复。** 专题是一条学习路线，同一个专题里同一个知识点只写一次。不同专题之间允许重叠：各自按自己的来源完整地写，需要时用站内链接指向另一个专题里讲得更深的内容。
+- The overlap conclusion and its basis (created a new topic / extended or folded into which topic; if the user chose, say that you followed their choice)
+- Which pages were added or changed, with knowledge point and question counts; which mind map branches were created or updated
+- What you inferred and what you left out (e.g. chapters skipped)
+- That refreshing the browser shows the changes
 
-**原则二：合并还是新建，由用户决定。** 用户没有说明放在哪里时，你负责分析并给出建议；不能自行合并，也不能在明显有同类专题的情况下悄悄新建。
+## II. Overlap analysis and authorization
 
-### 1. 用户是否已经说明
+**Principle 1: no duplication within a topic.** A topic is one learning path; within a topic, each piece of knowledge is written once. Topics may overlap each other: each is written completely from its own source, with in-site links to deeper coverage in another topic where useful.
 
-下面这些都算已说明，照做即可，不再询问：
+**Principle 2: the user decides between merging and a new topic.** When the user hasn't said where content goes, you analyze and recommend; you may not merge on your own, nor quietly create a new topic when a similar one clearly exists.
 
-- 「新建一个专题」「单独建一个」「不要合并」
-- 「合并到 X」「加到 X 里」「扩展 X」「补到 X 的某一页」
-- 本次对话里用户已经对同一份来源做过选择
-- 用户给过长期规则（例如「以后同类岗位一律合并」），且这条规则适用于当前情况
+### 1. Has the user already said?
 
-### 2. 找候选专题
+All of these count as said; just do it, without asking:
 
-拿第 3 步的知识清单，和每个已有专题逐个比对，从两个角度看。
+- "Create a new topic", "make it a separate topic", "don't merge"
+- "Merge into X", "add it to X", "extend X", "add it to page Y of X"
+- The user already made a choice for the same source earlier in this conversation
+- The user has given a standing rule (e.g. "always merge roles of the same kind from now on") and it applies here
 
-**来源是否同类**（看 `topic.json` 的 `kind`、`name`、`origin` 和 `source.md`）：
+### 2. Find candidate topics
 
-| 已有专题 | 算同类的情况 |
+Take the knowledge list from step 3 and compare it with each existing topic from two angles.
+
+**Is the source of the same kind?** (see `kind`, `name` and `origin` in `topic.json`, and `source.md`)
+
+| Existing topic | Counts as the same kind when |
 | --- | --- |
-| 岗位 | 岗位名相同或相近；职责高度相似（同一方向的不同公司、同一公司的不同级别） |
-| 书 | 同一本书的另一版本或译本；同一主题的另一本书（两本操作系统教材） |
-| 课程 | 同一门课的另一学期；另一所学校的同名课；同一主题的另一门课 |
-| 跨类型 | 一本书或一门课正好是某个岗位专题的核心内容（后端岗位 与 《DDIA》） |
+| Job | Same or similar job title; highly similar responsibilities (the same direction at different companies, different levels at the same company) |
+| Book | Another edition or translation of the same book; another book on the same subject (two operating systems textbooks) |
+| Course | Another term of the same course; a course of the same name at another school; another course on the same subject |
+| Across types | A book or course that is exactly the core of a job topic (a backend role and *DDIA*) |
 
-**知识是否重叠**（粗略估计两个比例；「覆盖」指同一个知识、相近的深度）：
+**Does the knowledge overlap?** (rough estimates of two ratios; "covered" means the same knowledge at a similar depth)
 
-- **A**：新来源的知识点里，已经被这个已有专题覆盖的比例（新 ⊆ 旧 的程度）
-- **B**：这个已有专题的知识点里，新来源也需要的比例（旧 ⊆ 新 的程度）
+- **A**: the share of the new source's knowledge points that this existing topic already covers (how far new ⊆ old)
+- **B**: the share of this existing topic's knowledge points that the new source also needs (how far old ⊆ new)
 
-**候选专题** = 来源同类的，或者 A、B 任一 ≥ 30% 的已有专题。新来源需要明显更深的，算作覆盖不足，之后在原知识点上加深，不另写一份。
+**Candidate topics** = existing topics of the same kind, or with A or B ≥ 30%. When the new source needs clearly more depth, count it as not covered; later, deepen the existing knowledge point instead of writing a second copy.
 
-估算方法：拿知识清单逐条对照已有专题的知识点，数出「已覆盖 / 总数」；发给用户时写成「约 18/40」这样的分数，不只给百分比，便于核对。
+How to estimate: go through the knowledge list item by item against the existing topic's knowledge points and count "covered / total". When sending this to the user, write it as a fraction such as "about 18/40", not just a percentage, so it can be checked.
 
-### 3. 决定
+### 3. Decide
 
-| 情况 | 做法 |
+| Situation | What to do |
 | --- | --- |
-| 用户已说明 | 照做 |
-| 没有候选专题 | 直接新建，不用问；汇报里说明比对过哪些专题 |
-| 有候选专题 | 把分析和建议发给用户，**停下来等回复**；回复之前不要写任何文件 |
+| The user has said | Do it |
+| No candidate topics | Create a new topic without asking; say in the report which topics you compared against |
+| There are candidate topics | Send the analysis and recommendation to the user and **stop and wait for the reply**; don't write any file before it comes |
 
-发给用户的内容要短，几行即可：
+Keep the message short, a few lines:
 
-1. 新来源是什么（类型、名字）。
-2. 每个候选专题：名字、类型、A 和 B 的估计值、主要重叠在哪些主题。
-3. 你的建议和理由。建议的依据：
-   - A ≥ 70% → **归入**（往已有专题里补缺）
-   - B ≥ 70% → **扩展**（已有专题变成更大的范围，并给出新的专题名）
-   - 同一本书的新版本、同一门课的新学期 → 归入，只补差异
-   - 其余 → **新建**
-4. 请用户选择：**合并到某个候选**（归入或扩展），还是**新建专题**。有多个候选时逐个列出。
+1. What the new source is (type, name).
+2. For each candidate topic: name, type, estimates of A and B, and the main areas of overlap.
+3. Your recommendation and why. Base it on:
+   - A ≥ 70% → **fold in** (fill the gaps in the existing topic)
+   - B ≥ 70% → **extend** (the existing topic grows into a broader scope; propose the new topic name)
+   - A new edition of the same book, a new term of the same course → fold in, adding only the differences
+   - Otherwise → **new topic**
+4. Ask the user to choose: **merge into a candidate** (fold in or extend), or **create a new topic**. With several candidates, list each one.
 
-例如：
+For example:
 
 ```text
-新来源：岗位「AI Agent Security · 某公司」。
-候选专题：「LLM Security」（岗位）——新来源约 45% 的知识点已有（A），已有知识点约 85% 新来源也需要（B），重叠在提示注入、越狱、数据泄露。
-建议：扩展「LLM Security」为「LLM 与 AI Agent 安全」，只新增工具调用安全、权限与沙箱、MCP 供应链、多 Agent 与记忆投毒等页面。
-请选择：1）按建议扩展  2）新建专题「AI Agent Security」
+New source: job "AI Agent Security · Some Company".
+Candidate: "LLM Security" (job). About 45% of the new source's knowledge points already exist there (A); about 85% of its knowledge points are also needed by the new source (B). Overlap: prompt injection, jailbreaks, data leakage.
+Recommendation: extend "LLM Security" into "LLM and AI Agent Security", adding only pages on tool-calling security, permissions and sandboxing, the MCP supply chain, multi-agent systems and memory poisoning.
+Please choose: 1) extend as recommended  2) create a new topic "AI Agent Security"
 ```
 
-等待期间可以做不需要用户决定的准备：读完来源、整理知识清单、拟页面草案。用户回复后按选择执行；回复里附带的其他要求（改专题名、只做某几章）一并照做。无人值守、得不到回复时也一样：停在这一步，把候选和建议写进汇报，不自行决定。
+While waiting, you may do the preparation that needs no decision: read the whole source, build the knowledge list, draft the pages. After the reply, follow the user's choice, together with any other requests in it (renaming the topic, only certain chapters). If you are running unattended and get no reply, the same applies: stop at this step, put the candidates and your recommendation in the report, and don't decide on your own.
 
-- 多个候选都满足合并条件时，建议比例最高的那个。
-- 不要自动合并两个已有专题，也不要在专题之间搬移页面——作答记录和笔记按 id 关联，搬移会让它们失效。确实冗余时向用户提建议，由用户决定。
+- If several candidates qualify for merging, recommend the one with the highest ratio.
+- Don't merge two existing topics automatically, and don't move pages between topics: answer records and notes are linked by id, and moving breaks them. If something really is redundant, suggest it to the user and let them decide.
 
-### 4. 例子
+### 4. Examples
 
-- 已有「LLM Security」（岗位），新来「AI Agent Security」JD：来源同类，B 很高 → 候选。建议**扩展**：保留已有页面，新增工具调用安全、权限与沙箱、MCP 供应链、多 Agent 与记忆投毒等页面，专题名改成「LLM 与 AI Agent 安全」。**先问用户**。
-- 已有「AI Agent Security」（岗位），新来「LLM Security」JD：A 很高 → 候选。建议**归入**：补少数缺的知识点，追加来源。先问用户。
-- 已有《操作系统概念》第 9 版（书），新来同一本书第 10 版：同一本书 → 候选。建议归入，只补新版新增或改写的内容，`source.md` 追加版本说明。先问用户。
-- 已有「后端工程师」（岗位），新来《DDIA》（书）：跨类型同类，数据系统部分 A 高、B 中等 → 候选。两种做法都说得通：归入后端专题作为几页深入内容，或新建《DDIA》专题并把后端专题里的概述链接过去。先问用户，说明两种做法的差别。
-- 已有「LLM Security」，新来「AI Agent 开发工程师」JD：只在提示注入等少数主题上重叠，A、B 都低，也不是同类岗位 → 直接**新建**；汇报里说明比对结果。
-- 已有「AI Agent Security」，新来《算法导论》：没有候选 → 直接新建。
+- Existing "LLM Security" (job), new "AI Agent Security" JD: same kind, high B → candidate. Recommend **extending**: keep the existing pages, add pages on tool-calling security, permissions and sandboxing, the MCP supply chain, multi-agent systems and memory poisoning, and rename the topic "LLM and AI Agent Security". **Ask the user first.**
+- Existing "AI Agent Security" (job), new "LLM Security" JD: high A → candidate. Recommend **folding in**: add the few missing knowledge points and append the source. Ask the user first.
+- Existing *Operating System Concepts*, 9th edition (book), new 10th edition of the same book: same book → candidate. Recommend folding in, adding only what the new edition adds or rewrites, and append an edition note to `source.md`. Ask the user first.
+- Existing "Backend Engineer" (job), new *DDIA* (book): same kind across types; A high for the data-systems part, B moderate → candidate. Both approaches make sense: fold it into the backend topic as a few in-depth pages, or create a *DDIA* topic and link the backend topic's overviews to it. Ask the user first and explain the difference.
+- Existing "LLM Security", new "AI Agent Developer" JD: overlaps only on a few subjects such as prompt injection, A and B both low, not the same kind of role → just create a **new** topic; describe the comparison in the report.
+- Existing "AI Agent Security", new *Introduction to Algorithms*: no candidate → just create a new topic.
 
-### 5. 各种做法的具体操作
+### 5. How to carry out each choice
 
-**归入**
+**Fold in**
 
-- 缺的主题能放进已有页面，就作为新知识点加到那一页（连同题目）；成片缺失时才新增页面。
-- 新增的知识点和页面同步加进 `mindmap.md`。
-- 在 `source.md` 末尾追加新来源（新开一个 `###` 小节）。
-- 可以在 `topic.json` 的 `description` 里补一句它也覆盖了什么。
+- If a missing subject fits an existing page, add it to that page as a new knowledge point (with questions); add new pages only for whole missing areas.
+- Add the new knowledge points and pages to `mindmap.md`.
+- Append the new source at the end of `source.md` (a new `###` subsection).
+- You may add a sentence to `description` in `topic.json` about what else it now covers.
 
-**扩展**
+**Extend**
 
-- 不新建文件夹，**专题 id（文件夹名）保持不变**——作答记录 `data/records/<专题id>.jsonl` 和笔记 `data/notes/<专题id>/` 都靠它关联。
-- 新页面按逻辑顺序插入：可以调整页面文件夹的序号前缀，但不要改序号后面的页面 id。
-- 已有页面需要加深时，追加知识点和题目，不改已有题目的 id。
-- 把 `topic.json` 的 `name`、`description` 改成更宽的范围（`kind` 按主要类型填）；把新来源追加到 `source.md`。
-- `mindmap.md` 按新的范围调整分组，把新页面和知识点加进去。
+- Don't create a new folder; **keep the topic id (folder name)** — answer records `data/records/<topic-id>.jsonl` and notes `data/notes/<topic-id>/` are linked through it.
+- Insert new pages in logical order: you may change the number prefix of page folders, but not the page id after it.
+- When an existing page needs more depth, append knowledge points and questions; don't change existing question ids.
+- Change `name` and `description` in `topic.json` to the wider scope (`kind` takes the main type); append the new source to `source.md`.
+- Regroup `mindmap.md` for the new scope and add the new pages and knowledge points.
 
-**新建**
+**New topic**
 
-- 新建 `data/topics/<新专题id>/`。
-- 与其他专题重叠的主题照常写，让新专题自成体系；需要时用站内链接指向其他专题里更深入的页面作延伸阅读。
+- Create `data/topics/<new-topic-id>/`.
+- Write subjects that overlap other topics as usual, so that the new topic stands on its own; where useful, link to deeper pages in other topics as further reading.
 
-**站内链接**（`knowledge.md`、`source.md`、`mindmap.md` 的要点、题目解析里都能用，点击后在网站内跳转；路径里的 `p` 是固定前缀）：
+**In-site links** (usable in `knowledge.md`, `source.md`, mind map bullets and question explanations; clicking one navigates within the site; the `p` in the path is a fixed prefix):
 
 ```markdown
-详见 [提示注入](#/p/llm-security/page/prompt-injection)
-直接定位到某个知识点：[间接注入](#/p/llm-security/page/prompt-injection?kp=indirect)
+See [Prompt Injection](#/p/llm-security/page/prompt-injection)
+Jump straight to a knowledge point: [indirect injection](#/p/llm-security/page/prompt-injection?kp=indirect)
 ```
 
-## 三、文件格式
+## III. File formats
 
-### 目录与命名
+### Folders and naming
 
 ```text
 data/topics/
-└── <专题id>/                例：ai-agent-security、csapp、mit-6-824
+└── <topic-id>/              e.g. ai-agent-security, csapp, mit-6-824
     ├── topic.json
-    ├── source.md            可选：来源原文（JD、目录、大纲）
-    ├── mindmap.md           思维导图：概括全部页面和知识点
+    ├── source.md            optional: the source text (JD, table of contents, syllabus)
+    ├── mindmap.md           mind map summarizing all pages and knowledge points
     └── pages/
-        ├── 01-<页面id>/      例：01-prompt-injection
+        ├── 01-<page-id>/    e.g. 01-prompt-injection
         │   ├── knowledge.md
         │   └── questions.json
-        └── 02-<页面id>/ …
+        └── 02-<page-id>/ …
 ```
 
-- 专题 id、页面 id、知识点 id 用小写英文单词加连字符，例如 `tool-calling`；题目 id 用 `q01`、`q02`……。
-- 专题 id 取范围较宽、以后不用改的名字：岗位用方向名（`backend`、`ai-agent-security`）而不是公司名；书用书名缩写（`csapp`、`ddia`）不带版次；课程用课号或课名（`mit-6-824`、`operating-systems`）不带学期。
-- 页面文件夹名 = 两位序号 + `-` + 页面 id。页面 id 在专题内唯一；序号只决定顺序。
-- 以 `_` 开头的文件夹不会被加载，可以当草稿用。
-- 页面文件夹里的 `_history/` 是用户在网页上编辑 `knowledge.md` 时自动保留的旧版本，加载时忽略；不要往里写东西。
-- 旧版名字 `data/positions/`、`position.json`、`jd.md` 和 `company` 字段仍能被读取，但新写的内容一律用新名字。
+- Topic, page and knowledge point ids are lowercase English words joined by hyphens, e.g. `tool-calling`; question ids are `q01`, `q02`, ….
+- Pick a topic id for a broad scope that won't need changing later: jobs use the direction (`backend`, `ai-agent-security`), not the company name; books use an abbreviation of the title (`csapp`, `ddia`) without the edition; courses use the course code or name (`mit-6-824`, `operating-systems`) without the term.
+- Page folder name = two-digit number + `-` + page id. Page ids are unique within a topic; the number only sets the order.
+- Folders starting with `_` are not loaded and can be used for drafts.
+- A page folder's `_history/` holds old versions saved automatically when the user edits `knowledge.md` on the site; loading ignores it. Don't write into it.
+- The old names `data/positions/`, `position.json`, `jd.md` and the `company` field are still read, but new content always uses the new names.
 
 ### topic.json
 
 ```json
 {
-  "name": "AI Agent 安全工程师",
+  "name": "AI Agent Security Engineer",
   "kind": "job",
-  "origin": "某公司",
-  "description": "一句话说明覆盖范围",
+  "origin": "Some Company",
+  "description": "One sentence on what it covers",
   "order": 2
 }
 ```
 
-| 字段 | 说明 |
+| Field | Meaning |
 | --- | --- |
-| `name` | 必填。专题名：岗位名、书名、课程名 |
-| `kind` | 可选。`job`（岗位）、`book`（书）、`course`（课程）、`exam`（考试）；也可以写其他文字，网站会原样显示。合并了不同类型的来源时写主要的那种 |
-| `origin` | 可选。出处：公司、作者或出版社、学校或讲者。合并了多家来源时可以留空 |
-| `description` | 可选。一句话说明覆盖范围 |
-| `order` | 专题列表的顺序，小的在前。新专题取现有最大值 + 1（示例专题 `sample` 的 99 不算）。用户在专题列表里拖动排序后，网站会把各专题的 `order` 改写成 1、2、3…… |
+| `name` | Required. Topic name: job title, book title, course name |
+| `kind` | Optional. `job`, `book`, `course` or `exam`; any other text is shown as is. When sources of different types are merged, use the main one |
+| `origin` | Optional. Where it comes from: company, author or publisher, school or lecturer. May be empty when several sources are merged |
+| `description` | Optional. One sentence on what it covers |
+| `order` | Position in the topic list, smaller first. A new topic takes the current maximum + 1 (the sample topic's 99 doesn't count). When the user drag-sorts the topic list, the site rewrites every topic's `order` as 1, 2, 3, … |
 
 ### source.md
 
-记录来源，每份来源一个 `###` 小节，标题写成「类型 · 名字 · 出处（时间）」。岗位：保存 JD 原文，去掉公司介绍、福利等无关内容。书：只写书名、版次、作者、目录和本专题覆盖的范围，**不粘贴正文**。课程：只写课名、学校或讲者、学期、讲次清单和考试范围，**不粘贴课件内容**。往已有的 `source.md` 追加时，如果原内容没有小节标题，先给它补一个。
+Records the sources, one `###` subsection per source, titled "Type · Name · Origin (date)". Job: keep the JD text, minus the company introduction, benefits and other irrelevant parts. Book: only the title, edition, author, table of contents and the range this topic covers — **don't paste the text**. Course: only the course name, school or lecturer, term, the list of lectures and the exam scope — **don't paste slide content**. When appending to an existing `source.md` whose content has no subsection heading yet, add one first.
 
 ```markdown
-### 岗位 · AI Agent 安全工程师 · 某公司（2026-10）
+### Job · AI Agent Security Engineer · Some Company (2026-10)
 
-**岗位职责**
-
-- …
-
-**任职要求**
+**Responsibilities**
 
 - …
 
-### 书 · 《深入理解计算机系统》第 3 版 · Bryant & O'Hallaron
+**Requirements**
 
-**目录**
+- …
 
-1. 计算机系统漫游
-2. 信息的表示和处理
+### Book · *Computer Systems: A Programmer's Perspective*, 3rd ed. · Bryant & O'Hallaron
+
+**Contents**
+
+1. A Tour of Computer Systems
+2. Representing and Manipulating Information
 3. …
 
-本专题覆盖第 1–9 章，第 10–12 章从略。
+This topic covers chapters 1–9; chapters 10–12 are left out.
 
-### 课程 · MIT 6.824 Distributed Systems（2024 春）· MIT
+### Course · MIT 6.824 Distributed Systems (Spring 2024) · MIT
 
-**讲次**
+**Lectures**
 
 - L1 Introduction
 - L2 RPC and Threads
@@ -300,25 +302,25 @@ data/topics/
 ### knowledge.md
 
 ```markdown
-# 提示注入
+# Prompt Injection
 
-## 直接注入与间接注入 {#direct-indirect}
+## Direct and Indirect Injection {#direct-indirect}
 
-正文（Markdown）……
+Body (Markdown)…
 
-### 小标题（知识点内部只能用 ### 及以下）
+### Subheading (inside a knowledge point, only ### and below)
 
-## 防御手段 {#defenses}
+## Defenses {#defenses}
 
-……
+…
 ```
 
-- 第一行是 `# 页面标题`。
-- 每个 `## 标题 {#知识点id}` 开始一个知识点，直到下一个 `##`。`{#知识点id}` 必须写。知识点内部的小标题用 `###`、`####`。
-- 第一个 `##` 之前可以写一两句页面导语；没必要就不写。
-- 代码块里的 `##` 不会被当成知识点。
-- 支持：表格、引用、列表、行内代码、带语言标注的代码块（python、javascript、typescript、json、bash、shell、sql、yaml、go、java、cpp、rust、xml/html、markdown、dockerfile、http）、KaTeX 公式（行内 `$...$`，独立成行 `$$...$$`）。正文里不要出现成对的单个 `$`（例如价格），否则会被当成公式。
-- 不支持图片和 Mermaid 图（网站离线运行，也没有图片目录）。流程、架构用有序列表、表格或代码块里的文字示意来表达。
+- The first line is `# Page title`.
+- Each `## Title {#point-id}` starts a knowledge point, which runs until the next `##`. `{#point-id}` is required. Subheadings inside a knowledge point use `###` and `####`.
+- A one- or two-sentence page lead may go before the first `##`; leave it out when it isn't needed.
+- `##` inside code blocks is not treated as a knowledge point.
+- Supported: tables, blockquotes, lists, inline code, fenced code blocks with a language tag (python, javascript, typescript, json, bash, shell, sql, yaml, go, java, cpp, rust, xml/html, markdown, dockerfile, http), and KaTeX math (inline `$...$`, display `$$...$$` on its own lines). Don't write paired single `$` in body text (e.g. prices), or they will be rendered as math.
+- Images and Mermaid diagrams are not supported (the site runs offline and has no image folder). Show flows and architectures with ordered lists, tables or text diagrams in code blocks.
 
 ### questions.json
 
@@ -327,15 +329,15 @@ data/topics/
   {
     "id": "q01",
     "points": ["direct-indirect"],
-    "stem": "题干，支持 Markdown",
-    "options": ["选项一", "选项二", "选项三", "选项四"],
+    "stem": "The question; Markdown supported",
+    "options": ["Option one", "Option two", "Option three", "Option four"],
     "answer": "B",
-    "explanation": "解析，支持 Markdown"
+    "explanation": "The explanation; Markdown supported"
   },
   {
     "id": "q02",
     "points": ["direct-indirect", "defenses"],
-    "stem": "多选题的答案写多个字母",
+    "stem": "A multiple-answer question lists several letters",
     "options": ["…", "…", "…", "…"],
     "answer": "AC",
     "explanation": "…"
@@ -343,131 +345,136 @@ data/topics/
 ]
 ```
 
-| 字段 | 说明 |
+| Field | Meaning |
 | --- | --- |
-| `id` | 本页内唯一，`q01`、`q02`……依次编号 |
-| `points` | 这道题考查的知识点 id，可以多个，必须是本页的知识点 |
-| `stem` | 题干，可以包含代码块 |
-| `options` | 2–8 个选项，按顺序对应 A、B、C…… |
-| `answer` | 正确选项的字母；多个字母就是多选题 |
-| `explanation` | 解析 |
-| `type` | 可选：`single` / `multi`。只有一个正确答案、但想按多选题出时写 `multi` |
-| `shuffle` | 可选：写 `false` 时这道题不打乱选项 |
+| `id` | Unique within the page: `q01`, `q02`, … in order |
+| `points` | Ids of the knowledge points this question tests; may be several; must be knowledge points of this page |
+| `stem` | The question; may contain code blocks |
+| `options` | 2–8 options, mapped in order to A, B, C, … |
+| `answer` | Letter of the correct option; several letters make it a multiple-answer question |
+| `explanation` | The explanation |
+| `type` | Optional: `single` / `multi`. Write `multi` only when a question has one correct answer but should be presented as a multiple-answer question |
+| `shuffle` | Optional: `false` keeps this question's options in their order |
 
-网站默认打乱选项顺序，所以题干、选项和解析都不能依赖选项的位置。
+The site shuffles options by default, so stems, options and explanations must not depend on option positions.
 
 ### mindmap.md
 
-网站把它画成这个专题的思维导图（侧栏的「思维导图」）：中心是专题名，往外依次是分组、页面、知识点、要点，可以逐级展开；页面和知识点节点按题目的掌握情况着色，节点上的箭头打开正文。
+The site draws it as the topic's mind map ("Mind map" in the side navigation): the topic name in the center, then groups, pages, knowledge points and bullets outward, each level expandable. Page and knowledge point nodes are colored by how well their questions are mastered, and the arrow on a node opens its text.
 
 ```markdown
-- 威胁与攻击
+- Threats and Attacks
   - {prompt-injection}
     - {#definition}
-      - 不可信输入劫持模型行为，偏离开发者/用户意图
-      - 根因：指令与数据同一通道，没有硬边界
-      - vs 越狱
-        - 注入：劫持应用，攻击者常是第三方
-        - 越狱：绕过模型安全策略，常是用户本人
+      - Untrusted input hijacks model behavior against developer/user intent
+      - Root cause: instructions and data share one channel, no hard boundary
+      - vs jailbreak
+        - Injection: hijacks the app, attacker is often a third party
+        - Jailbreak: bypasses the model's safety policy, often the user themselves
     - {#direct-indirect}
       - …
-- 防御体系
+- Defenses
   - …
 ```
 
-- 整个文件是一个多级列表：每行一个节点「- 文字」，每深一级多缩进两个空格。不写其他段落。
-- 中心节点显示专题名；第一行写 `# 标题` 可以换成别的文字，一般不用写。
-- 行尾的花括号把节点关联到页面或知识点：`{页面id}` 关联页面；`{#知识点id}` 关联最近的上级页面里的知识点；`{页面id#知识点id}` 直接指定页面和知识点。
-- 关联节点一般不写文字，网站显示页面或知识点的标题，标题改了导图跟着变；标题太长时可以在花括号前写一个短的。
-- 要点里可以用行内 Markdown：行内代码、加粗、`$公式$`、站内链接。行尾不要写成 `{…}` 的样子（会被当成关联），也不要出现成对的单个 `$`。
-- `--check` 会提示：找不到的页面或知识点、没有出现在导图里的知识点、出现了不止一次的知识点、不是列表项的行。
+- The whole file is one nested list: one node per line, written `- text`, each level indented two more spaces. No other paragraphs.
+- The center node shows the topic name; a first line `# Title` replaces it with other text, which is rarely needed.
+- Braces at the end of a line link the node to a page or knowledge point: `{page-id}` links a page; `{#point-id}` links a knowledge point of the nearest enclosing page; `{page-id#point-id}` names both.
+- Linked nodes usually have no text of their own: the site shows the page or knowledge point title and follows it when the title changes. If a title is too long, you may write a shorter label before the braces.
+- Bullets may use inline Markdown: inline code, bold, `$math$`, in-site links. Don't end a line with something shaped like `{…}` (it would be read as a link), and don't use paired single `$`.
+- `--check` warns about pages or knowledge points that can't be found, knowledge points missing from the map, knowledge points that appear more than once, and lines that are not list items.
 
-## 四、内容标准
+## IV. Content standards
 
-### 知识点
+### Language
 
-- 开头一两句直接给出结论或定义，能当作面试回答或考试答题的第一句话。
-- 然后按需要展开：原理与机制 → 对比与取舍（多用表格）→ 实践与例子（代码、配置、真实场景）→ 常见误区。
-- 面试常问或考试常考的知识点，结尾加一段 `> 面试回答：`（岗位专题）或 `> 要点回顾：`（书、课程专题），写 30 秒内能说完的要点。
-- 篇幅以 150–500 字为主，复杂主题可以到 800 字；再长就拆成两个知识点。
-- 知识点标题简短明确（一般不超过 16 个字）。
-- 默认用简体中文。书和课程的专题沿用来源的术语和记号（书里的变量名、课件里的符号）。用户说面试或考试用英文时，全部用英文写。
-- **用简体中文写时，每个核心术语后面都要用括号注明对应的英文术语**，写成「中文（English）」，例如「梯度（gradient）」「线性无关（linearly independent）」。每个知识点里该术语第一次出现时必须标注，知识点之间不能因为前面标过就省略；同一个知识点内再次出现时可以只写中文，或直接用英文和缩写。核心术语指这个知识点要讲清楚的概念、方法和定理名，日常用语和已经是英文的词不用标。题干、选项和解析里出现正文没有标注过的核心术语时，同样标注。英文术语以来源原文为准，没有来源的用业内通行说法，不自造译名。
-- 不写空话和过渡句（例如「本节将介绍……」），不写与学习无关的历史掌故。
-- 用自己的话写。引用书或课件原文只引关键的一两句并标明出处，不整段摘抄。
-- 同一个专题里一个知识点只写一次；与其他专题重叠的内容照常写，需要时用站内链接指向另一个专题里讲得更深的部分。
+- Write in the language of the user's request. If the user says the interview or exam will be in a particular language, write in that language. A topic stays in one language: when you add to an existing topic, keep the language it is written in unless the user asks otherwise.
+- **When the content is not in English, put the English term in parentheses after every core term**, e.g. in Chinese `梯度（gradient）`, `线性无关（linearly independent）`. Annotate the term's first occurrence in every knowledge point, even when an earlier knowledge point already annotated it; later occurrences within the same knowledge point may use the term alone, or the English term or abbreviation directly. Core terms are the concepts, methods and theorem names that the knowledge point explains; everyday words and words that are already English need no annotation. Core terms in stems, options and explanations that the body hasn't annotated get annotated too. Take the English term from the source; without a source, use the established industry term; don't coin translations.
+- English content needs no annotations.
+- Book and course topics keep the source's terminology and notation (the book's variable names, the slides' symbols).
 
-### 题目
+### Knowledge points
 
-- 每个知识点至少 2 道题，重点知识点 3–4 道。
-- 题型大致比例：概念理解 30%、场景应用与排错 40%、对比与取舍 20%、细节与易错点 10%。多选题占 25%–40%。
-- 难度：岗位专题以面试官实际会问的深度为准；书和课程专题以课后习题、考试会考的深度为准，不超出来源讲到的范围。
-- **每道题都要考对知识点的理解和运用**：机制和原理、为什么这样设计、不同做法的取舍、在具体场景里怎么判断和处理。答对一道题应当说明「懂了这个知识点」，而不是「记住了一个事实」。
-- **不出无意义的背诵题**：某个概念在哪一年、由谁、在哪篇论文或哪家公司提出；标准、规范、模型的版本号和发布日期；榜单或清单里某一项的编号、排名和条数；某个库参数的默认值；缩写展开、术语翻译这类纯名词对应。这些事实可以写在知识点正文里，但不能作为题目的考点。判断标准：答案查一次资料就能得到、而知道它对做事没有帮助的，不出。
-- 引用论文、事件、标准时，考它说明的道理，不考它本身：不问「某研究的结论是什么」，而把结论变成场景题或判断题；不问「某事件发生在哪年」，而问「这个事件暴露了什么问题、该用哪些措施防住」。题干里不写年份、作者、CVE 编号这类出处信息，需要出处的放进解析。标准和榜单（例如 OWASP Top 10）考每一类风险的含义、识别和缓解，不考编号和顺序。
-- 例外：数字或名称本身就是工作中要用的知识时可以考，例如 HTTP 状态码的含义、TCP 三次握手的过程；但题目仍然要落在它的含义和用法上。
-- 题干自成一体，不写「根据上文」；一道题只考一个点；否定式题干把「**不**」加粗。
-- 一般 4 个选项（多选题可以 4–5 个），长度和语气相近；干扰项来自真实存在的误解，不能一眼看出是错的。
-- 不用「以上都对」「以上都不对」这类依赖位置的选项；确实需要时给这道题加 `"shuffle": false`。
-- 多选题有 2–3 个正确项；题干里不写「（多选）」，网站会显示题型。
-- 正确答案分布在各个位置；不要让最长的选项总是答案。
-- 不与本专题已有的题目重复。
+- Open with one or two sentences that state the conclusion or definition directly — something that could be the first sentence of an interview or exam answer.
+- Then expand as needed: principle and mechanism → comparison and trade-offs (tables work well) → practice and examples (code, configuration, real scenarios) → common pitfalls.
+- For knowledge points that interviews or exams often ask about, end with a blockquote `> Interview answer:` (job topics) or `> Recap:` (book and course topics), with the label written in the content's language, giving the points you could say in 30 seconds.
+- Length: mostly 100–350 words (150–500 characters in Chinese); complex subjects up to about 550 words (800 characters). Anything longer gets split into two knowledge points.
+- Knowledge point titles are short and specific (usually at most about 6 words, or 16 Chinese characters).
+- No filler or transition sentences (e.g. "This section introduces…"), no historical anecdotes that don't help learning.
+- Use your own words. Quote a book or slides only for the key sentence or two, with the source named; don't copy whole paragraphs.
+- Within one topic, each knowledge point is written once; content that overlaps other topics is written as usual, with in-site links to deeper coverage in another topic where useful.
 
-### 解析
+### Questions
 
-- 先说明为什么对，再指出主要干扰项错在哪里，一般 50–150 字。
-- 用选项内容指代，不写「选 B」「A 项」（选项会被打乱）。
+- At least 2 questions per knowledge point; 3–4 for important ones.
+- Rough mix: concept understanding 30%, scenario application and troubleshooting 40%, comparison and trade-offs 20%, details and easy mistakes 10%. Multiple-answer questions make up 25%–40%.
+- Difficulty: job topics at the depth interviewers actually ask; book and course topics at the depth of end-of-chapter exercises and exams, not beyond what the source covers.
+- **Every question tests understanding and application of the knowledge point**: mechanisms and principles, why something is designed the way it is, trade-offs between approaches, how to judge and handle a concrete scenario. Answering correctly should show "understood this knowledge point", not "remembered a fact".
+- **No pointless recall questions**: the year, person, paper or company that introduced a concept; version numbers and release dates of standards, specifications and models; the number, rank or count of an item in a ranking or list; a library parameter's default value; expanding abbreviations, translating terms and other pure name matching. These facts may appear in the body, but must not be what a question tests. The test: if the answer can be looked up once and knowing it doesn't help you do anything, don't ask it.
+- When citing papers, incidents or standards, test the lesson, not the thing itself: don't ask "what did study X conclude"; turn the conclusion into a scenario or judgment question. Don't ask "what year did incident X happen"; ask "what problem did it expose, and which measures prevent it". Stems contain no years, authors, CVE numbers or other provenance; put provenance in the explanation if needed. For standards and lists (e.g. the OWASP Top 10), test what each risk means and how to recognize and mitigate it, not its number or order.
+- Exception: when a number or name is itself working knowledge, it may be tested, e.g. what HTTP status codes mean, or how the TCP three-way handshake works; the question should still be about its meaning and use.
+- Stems are self-contained, never "according to the text above"; one question tests one point; a negative stem bolds the negation (**not**).
+- Usually 4 options (4–5 for multiple-answer questions), similar in length and tone; distractors come from real misconceptions and shouldn't be obviously wrong.
+- Don't use position-dependent options such as "all of the above" / "none of the above"; if one is really needed, add `"shuffle": false` to that question.
+- Multiple-answer questions have 2–3 correct options; don't write "(select all that apply)" in the stem — the site shows the question type.
+- Spread correct answers across positions; don't let the longest option always be the answer.
+- Don't duplicate questions the topic already has.
 
-### 思维导图
+### Explanations
 
-- 作用是总览和减轻记忆负担：扫一遍就能想起整个专题的结构，以及每个知识点的核心内容。
-- 结构：中心（专题）→ 分组 → 页面 → 知识点 → 要点。岗位专题页面多（8 页以上）时，按主题分成 3–6 组，例如「基础知识 / 威胁与攻击 / 防御体系 / 评估与实战」；页面少时直接挂在中心下面。书和课程专题按章节或讲次顺序排，一般不另分组。
-- 每个知识点恰好出现一次，挂在它所在的页面下面，顺序与 `knowledge.md` 一致。
-- 每个知识点 3–5 条要点，大的可以到 6 条：第一条是核心定义或结论，然后是机制或根因、关键对比、主要措施、代表性的例子。知识点有 `> 面试回答：` 或 `> 要点回顾：` 的，要点要覆盖它。
-- 要点是记忆线索，不是句子：每条一般不超过 25 个字，末尾不加句号；「→」表示因果或流程，「vs」表示对比，「：」分开标签和内容，「、」或「/」用于列举。
-- 一组对比或一个短清单可以再下一级（例如「vs 越狱」下面两条），不要更深。十来项的清单按主题合并成 2–4 条，不逐项列出。
-- 只提炼 `knowledge.md` 里已有的内容，不加新事实，术语与正文一致。面试或考试里直接说的英文名（ReAct、RAG、LoRA）照写；为了简短，要点里不必给每个术语加括号注英文。
-- 不写年份、作者、论文名、版本号、编号这类背诵内容；案例名（例如 EchoLeak）可以作为记忆线索。
+- First explain why the answer is right, then where the main distractors go wrong; usually 40–100 words (50–150 Chinese characters).
+- Refer to options by their content, never "pick B" or "option A" (options are shuffled).
 
-### 准确性
+### Mind map
 
-- 只写有把握的内容。变化快的领域（模型、框架版本、OWASP Top 10 for LLM 等标准的版本）能联网就核实，并写明版本或年份；核实不了的不要写成确定的事实。
-- 书和课程的专题以来源原文为准；来源与业界共识不一致时，以来源为主，并在知识点或解析里说明差异。
-- 不编造数字、论文、链接、产品功能、章节和页码。
-- 同一概念在全站使用同一个术语。
+- Purpose: overview and memory relief — one scan should bring back the topic's structure and each knowledge point's core content.
+- Structure: center (topic) → groups → pages → knowledge points → bullets. Job topics with many pages (8 or more) group them by theme into 3–6 groups, e.g. "Foundations / Threats and Attacks / Defenses / Evaluation and Practice"; with few pages, they hang directly under the center. Book and course topics follow chapter or lecture order, usually without extra groups.
+- Each knowledge point appears exactly once, under its page, in the same order as in `knowledge.md`.
+- 3–5 bullets per knowledge point, up to 6 for big ones: the first is the core definition or conclusion, then the mechanism or root cause, key contrasts, main measures, a representative example. When the knowledge point has an `> Interview answer:` or `> Recap:`, the bullets cover it.
+- Bullets are memory cues, not sentences: usually at most about 10 words (25 characters in Chinese), no final period; `→` for cause or flow, `vs` for contrast, a colon between a label and its content, `/` or commas for lists.
+- A contrast or a short list may go one level deeper (e.g. the two lines under "vs jailbreak"), no deeper. Merge a dozen-item list into 2–4 bullets by theme instead of listing every item.
+- Only distill what `knowledge.md` already says — no new facts — and keep the body's terminology. English names used directly in interviews or exams (ReAct, RAG, LoRA) are written as they are; to keep bullets short, they need no English annotations even in non-English topics.
+- No years, authors, paper titles, version numbers or item numbers; case names (e.g. EchoLeak) are fine as memory cues.
 
-## 五、修改已有内容
+### Accuracy
 
-- 不要改：专题文件夹名、页面 id（文件夹名里序号之后的部分）、知识点 id、题目 id。作答记录和笔记靠它们关联。
-- 可以改：页面序号前缀、正文措辞、解析；可以补充知识点和题目。
-- 修正题目：只改措辞或改正答案时保留 id；考点变了就用新 id，并删掉旧题（旧 id 的作答记录会被网站忽略）。
-- 新题 id 取本页最大编号 + 1，不复用删掉的编号。
-- 增加、删除或移动了知识点和页面时，同步更新 `mindmap.md`；只改标题时不用动它。
-- 用户没让删的内容不要删。
+- Write only what you are sure of. For fast-moving areas (models, framework versions, standards such as the OWASP Top 10 for LLM Applications), verify online if you can and state the version or year; don't present what you can't verify as fact.
+- Book and course topics follow the source; when the source disagrees with industry consensus, follow the source and note the difference in the knowledge point or explanation.
+- Don't invent numbers, papers, links, product features, chapters or page numbers.
+- Use the same term for the same concept across the whole site.
 
-## 六、收尾检查
+## V. Editing existing content
 
-- [ ] 重叠分析已做：没有候选专题，或者用户已经做了选择
-- [ ] `--check` 没有错误，也没有覆盖类提示
-- [ ] 每个知识点至少 2 道题；多选题约占 25%–40%；正确答案位置分散
-- [ ] 解析里没有「选 B」「A 项」这类字母引用
-- [ ] 用简体中文写的内容：每个知识点里的核心术语都标了英文，写成「中文（English）」
-- [ ] 没有年份、提出者、论文名、版本号、编号这类背诵题；每道题都对应知识点的理解或运用
-- [ ] 书 / 课程专题：页面和知识点按原书章节或讲次划分，知识点标题带节号；`source.md` 只有目录和范围，没有正文摘抄
-- [ ] JSON 里 LaTeX 的反斜杠已经转义
-- [ ] 本专题内没有重复的知识点和题目
-- [ ] `mindmap.md` 已生成或更新：每个知识点出现一次，每个知识点 3–5 条简短要点，`--check` 没有思维导图提示
-- [ ] `topic.json`、`source.md` 已按重叠分析的结论更新
-- [ ] 没有改动 `data/records/`、`data/notes/`（示例数据除外）和代码文件
+- Don't change: topic folder names, page ids (the part of the folder name after the number), knowledge point ids, question ids. Answer records and notes are linked through them.
+- You may change: the page number prefix, the wording of the body and explanations; you may add knowledge points and questions.
+- Fixing a question: if only the wording or the correct answer changes, keep the id; if what it tests changes, use a new id and delete the old question (the site ignores answer records for ids that no longer exist).
+- A new question's id is the page's highest number + 1; never reuse deleted numbers.
+- When you add, delete or move knowledge points or pages, update `mindmap.md`; renaming alone doesn't require it.
+- Don't delete content the user didn't ask you to delete.
 
-## 七、其他任务：修改网站本身
+## VI. Final checklist
 
-只有用户明确要求改网站时才动代码。
+- [ ] Overlap analysis done: no candidate topics, or the user has chosen
+- [ ] `--check` shows no errors and no coverage warnings
+- [ ] Every knowledge point has at least 2 questions; multiple-answer questions are about 25%–40%; correct answers are spread across positions
+- [ ] No letter references such as "pick B" or "option A" in explanations
+- [ ] Content not in English: every knowledge point annotates its core terms with the English term in parentheses
+- [ ] No recall questions about years, proposers, paper titles, version numbers or item numbers; every question maps to understanding or applying a knowledge point
+- [ ] Book / course topics: pages and knowledge points follow the book's chapters or the lectures, and knowledge point titles carry section or lecture numbers; `source.md` has only the contents and scope, no copied text
+- [ ] LaTeX backslashes are escaped in JSON
+- [ ] No duplicate knowledge points or questions within the topic
+- [ ] `mindmap.md` created or updated: each knowledge point appears once, with 3–5 short bullets; `--check` shows no mind map warnings
+- [ ] `topic.json` and `source.md` updated according to the overlap conclusion
+- [ ] Nothing changed in `data/records/`, `data/notes/` (except sample data) or code files
 
-- 不引入依赖：后端只用 Python 标准库；前端是原生 ES 模块，第三方库放在 `web/vendor/`，不走 CDN（用户可能离线，或在访问不了境外 CDN 的网络里）。
-- `data/` 下的文件格式保持向后兼容：旧的 `data/positions/`、`position.json`、`jd.md`、`company` 字段要继续能读。
-- 界面风格：深色海军蓝底；颜色只用来表示数据状态（薄弱 / 一般 / 掌握 / 未做）；不加装饰性文字。
-- 安卓 App（`android/`）只是 WebView 外壳，网站代码在打包时从 `web/` 复制进去；`android/build.py` 只用 Python 标准库调用 Android SDK，不用 Gradle。改了 `web/` 之后运行 `python android/build.py` 重新打包。
-- 手机 App 里的页面经 `web/js/api.js` 读写手机本机的数据（`web/js/local.js`），不直接请求电脑；新增或改动 `api.js` 的接口时，`local.js` 要实现同样的接口。
-- 手机与电脑的同步：手机端在 `web/js/phone.js`、`web/js/autosync.js`，电脑端在 `server.py` 的 `apply_phone_sync`。作答记录按「时间 + 题目」合并；笔记只有一边改过就用那份，两边都改过用改得晚的、另一份存进 `_history/`；专题顺序（拖动排序）也是只有一边改过就用那份、两边都改过用改得晚的；各专题的重置时间记在 `data/records/resets.json`。改动作答记录、笔记、专题顺序的存储方式时，要同时照顾这三处。
-- 改完在浏览器里实际走一遍受影响的流程，并运行 `--check`。
+## VII. Other tasks: changing the site itself
+
+Change code only when the user explicitly asks you to change the site.
+
+- No new dependencies: the backend uses only the Python standard library; the front end is plain ES modules, with third-party libraries in `web/vendor/`, never loaded from a CDN (the user may be offline, or on a network that can't reach CDNs abroad).
+- Keep the file formats under `data/` backward compatible: the old `data/positions/`, `position.json`, `jd.md` and the `company` field must keep loading.
+- Interface style: dark navy background; color only encodes data state (Weak / Fair / Mastered / New); no decorative text. Interface text, messages, code comments and docs are in English.
+- The Android app (`android/`) is only a WebView shell; the site code is copied in from `web/` at build time. `android/build.py` drives the Android SDK using only the Python standard library, without Gradle. After changing `web/`, run `python android/build.py` to rebuild it.
+- Pages in the phone app read and write the phone's own data through `web/js/api.js` (implemented by `web/js/local.js`) and never call the computer directly; when you add or change an interface in `api.js`, implement the same interface in `local.js`.
+- Phone–computer sync: the phone side is in `web/js/phone.js` and `web/js/autosync.js`, the computer side in `apply_phone_sync` in `server.py`. Answer records are merged by "time + question". For notes, if only one side changed, that version is used; if both changed, the later edit wins and the other copy goes to `_history/`. The topic order (drag sorting) works the same way as notes. Each topic's reset time is in `data/records/resets.json`. When you change how answer records, notes or the topic order are stored, take care of all three places.
+- After changes, walk through the affected flows in a real browser and run `--check`.

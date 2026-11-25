@@ -1,4 +1,4 @@
-// Markdown 渲染：GFM 表格、代码高亮、$公式$（KaTeX）
+// Markdown rendering: GFM tables, code highlighting, $formulas$ (KaTeX)
 
 import { Marked } from '../vendor/marked.esm.js';
 import katex from '../vendor/katex/katex.mjs';
@@ -83,7 +83,7 @@ function render(src) {
     .replace(/<\/table>/g, '</table></div>');
 }
 
-// 题库内容不变，渲染结果缓存
+// Question bank content doesn't change, so rendered results are cached
 export function md(src) {
   if (!src) return '';
   let html = blockCache.get(src);
@@ -94,7 +94,7 @@ export function md(src) {
   return html;
 }
 
-// 笔记内容会一直变，不缓存
+// Note content keeps changing, so it isn't cached
 export function mdFresh(src) {
   return src ? render(src) : '';
 }

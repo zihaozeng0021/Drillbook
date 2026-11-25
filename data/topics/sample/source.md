@@ -1,13 +1,13 @@
-### AI Agent 开发（Sample）
+### AI Agent Development (Sample)
 
-**岗位职责**
+**Responsibilities**
 
-- 把自然语言需求拆成可验证的输入、工具操作与完成条件。
-- 为工具设计清晰的参数和结果契约，处理超时、重试与重复调用。
-- 从文档中检索可定位的证据，用小型评估集检查回答和执行效果。
+- Break natural-language requests down into verifiable inputs, tool operations and completion criteria.
+- Design clear parameter and result contracts for tools, and handle timeouts, retries and duplicate calls.
+- Retrieve citable evidence from documents and use small evaluation sets to check answers and task execution.
 
-**任职要求**
+**Requirements**
 
-- 理解结构化数据与基础 API 调用。
-- 了解检索增强生成（Retrieval-Augmented Generation，RAG）的基本流程。
-- 能区分检索、生成和工具执行环节的问题，进行简单回归评估。
+- Understand structured data and basic API calls.
+- Know the basic pipeline of retrieval-augmented generation (RAG).
+- Tell apart problems in retrieval, generation and tool execution, and run simple regression evaluations.

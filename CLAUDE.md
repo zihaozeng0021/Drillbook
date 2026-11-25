@@ -1,5 +1,5 @@
 # CLAUDE.md
 
-本仓库的 agent 指南写在 AGENTS.md。Claude Code 通过下面这行导入读取它：
+The agent guide for this repository is AGENTS.md. Claude Code reads it through the import below:
 
 @AGENTS.md

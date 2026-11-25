@@ -1,14 +1,14 @@
-// 手机 App 的本机数据：题库、作答记录、笔记存在 App 自己的存储（IndexedDB）里。
-// 对页面提供和 api.js 访问电脑服务时相同的接口，页面代码不用区分在哪里运行。
+// The phone app's local data: question bank, answer records and notes live in the app's own storage (IndexedDB).
+// Gives pages the same interface api.js offers when talking to the computer's server, so page code doesn't care where it runs.
 //
-// · 题库：从电脑下载的解析结果，整份替换；手机上不能编辑 knowledge.md
-// · 作答记录：同一时间、同一道题算同一条（作为主键），重复写入不会多出记录；
-//   手机上新做的记录带 local 标记，同步时上传给电脑，电脑收下后去掉标记
-// · 笔记：手机上改过的带 dirty 标记，同步时交给电脑合并；
-//   覆盖前的旧版本留在 noteHistory 里（规则和电脑上的 _history/ 一样）
-// · 重置作答记录：旧记录移到 archives，并记下重置时间；同步时电脑上的这个专题也跟着重置
-// · 专题顺序：手机上拖动过就记在 kv 的 topicOrder 里（新顺序、拖动时间、上次同步时电脑上的顺序 base），
-//   同步时交给电脑合并（只有一边改过用那边的，两边都改过用改得晚的）
+// · Question bank: the parsed result downloaded from the computer, replaced as a whole; knowledge.md can't be edited on the phone
+// · Answer records: time + question identify a record (they form the primary key), so writing the same one again adds nothing;
+//   records made on the phone carry a local flag, are uploaded to the computer when syncing, and lose the flag once the computer has them
+// · Notes: notes edited on the phone carry a dirty flag and are handed to the computer to merge when syncing;
+//   the old version is kept in noteHistory before being overwritten (same rules as _history/ on the computer)
+// · Reset answer records: old records move to archives and the reset time is recorded; on sync the topic is reset on the computer too
+// · Topic order: once dragged on the phone it's stored as topicOrder in kv (new order, drag time, and base = the computer's order at the last sync),
+//   and handed to the computer to merge when syncing (if only one side changed, that side wins; if both did, the later change wins)
 
 const DB_NAME = 'drillbook';
 const DB_VERSION = 1;
@@ -34,7 +34,7 @@ function openDb() {
       r.onsuccess = () => resolve(r.result);
       r.onerror = () => reject(r.error);
     });
-    // 尽量让系统别在存储空间紧张时清掉这些数据
+    // Ask the system not to clear this data when storage runs low
     navigator.storage?.persist?.().catch(() => {});
   }
   return dbPromise;
@@ -46,7 +46,7 @@ const req = (r) =>
     r.onerror = () => reject(r.error);
   });
 
-// 在一个事务里执行 fn(tx)；fn 里只能等待 IndexedDB 自己的请求，否则事务会提前结束
+// Runs fn(tx) in one transaction; fn may only await IndexedDB's own requests, otherwise the transaction ends early
 async function tx(stores, mode, fn) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
@@ -54,9 +54,9 @@ async function tx(stores, mode, fn) {
     let result;
     let failed = false;
     t.oncomplete = () => resolve(result);
-    // 出错的那一刻 t.error 还是 null，错误在触发事件的请求上
-    t.onerror = (ev) => !failed && reject(ev?.target?.error || t.error || new Error('本机存储出错'));
-    t.onabort = () => !failed && reject(t.error || new Error('本机存储写入中断'));
+    // At the moment of the error t.error is still null; the error is on the request that fired the event
+    t.onerror = (ev) => !failed && reject(ev?.target?.error || t.error || new Error('Local storage error'));
+    t.onabort = () => !failed && reject(t.error || new Error('Writing to local storage was interrupted'));
     Promise.resolve()
       .then(() => fn(t))
       .then(
@@ -68,7 +68,7 @@ async function tx(stores, mode, fn) {
           try {
             t.abort();
           } catch {
-            /* 已经结束 */
+            /* already finished */
           }
           reject(e);
         },
@@ -76,7 +76,7 @@ async function tx(stores, mode, fn) {
   });
 }
 
-const pageRange = (tid) => IDBKeyRange.bound([tid], [tid, []]); // 某个专题的全部 [tid, pageId]
+const pageRange = (tid) => IDBKeyRange.bound([tid], [tid, []]); // every [tid, pageId] of one topic
 const byteSize = (s) => (s ? enc.encode(s).length : 0);
 
 function fail(message, status, data) {
@@ -91,7 +91,7 @@ function plain(r) {
   return rest;
 }
 
-// 按 ids 的先后重排专题列表：ids 里提到的专题按它的先后，占住它们原来的那几个位置；没提到的不动（与 server.py 的 merge_order 相同）
+// Reorders the topic list by ids: topics named in ids follow that order and fill the positions they held before; the rest stay put (same as merge_order in server.py)
 function reorderTopics(list, ids) {
   const byId = new Map(list.map((p) => [p.id, p]));
   const picked = [...new Set(Array.isArray(ids) ? ids : [])].filter((id) => byId.has(id));
@@ -102,7 +102,7 @@ function reorderTopics(list, ids) {
 
 const sameIds = (a, b) => a.length === b.length && a.every((id, i) => id === b[i]);
 
-// 内容指纹：与 server.py 的 digest() 相同（UTF-8 字节的 SHA-256，取前 16 位十六进制）
+// Content fingerprint: same as digest() in server.py (SHA-256 of the UTF-8 bytes, first 16 hex digits)
 export async function digest(text) {
   if (!text) return '';
   const buf = await crypto.subtle.digest('SHA-256', enc.encode(text));
@@ -129,7 +129,7 @@ async function snapshot(t, tid, pageId, oldContent, newSize) {
   for (const k of keys.slice(0, Math.max(0, keys.length + 1 - HISTORY_KEEP))) hist.delete(k);
 }
 
-const READ_ONLY = '手机上不能编辑知识点文件，请在电脑上修改';
+const READ_ONLY = "Knowledge files can't be edited on the phone; edit them on the computer";
 
 export const local = {
   async topics() {
@@ -143,10 +143,10 @@ export const local = {
       const mine = await req(kv.get('topicOrder'));
       const next = reorderTopics(list, ids);
       const order = next.map((p) => p.id);
-      // 还没有未同步的拖动时，本机的顺序就是上次同步时电脑上的顺序
+      // With no unsynced drag yet, the local order is the computer's order at the last sync
       const base = mine?.base || list.map((p) => p.id);
       kv.put(next, 'topics');
-      if (sameIds(order, base)) kv.delete('topicOrder'); // 又拖回了电脑上的顺序：没有要同步的
+      if (sameIds(order, base)) kv.delete('topicOrder'); // dragged back to the computer's order: nothing to sync
       else kv.put({ ids: order, at: Date.now(), base }, 'topicOrder');
       return next;
     });
@@ -157,7 +157,7 @@ export const local = {
       await req(t.objectStore('topics').get(tid)),
       await req(t.objectStore('notes').getAll(pageRange(tid))),
     ]);
-    if (!topic) throw fail('专题不存在', 404);
+    if (!topic) throw fail('Topic not found', 404);
     const sizes = new Map(notes.map((n) => [n.pageId, n.size || 0]));
     for (const page of topic.pages) page.noteSize = sizes.get(page.id) || 0;
     return topic;
@@ -169,7 +169,7 @@ export const local = {
     return { records: list.map(plain), skipped: 0 };
   },
 
-  // 与 server.py 的 append_records 相同的清洗规则
+  // Same cleaning rules as append_records in server.py
   async saveRecords(tid, items) {
     const now = Date.now();
     const clean = [];
@@ -206,30 +206,30 @@ export const local = {
       resets[tid] = now;
       kv.put(resets, 'resets');
     });
-    return { archived: '手机本机' };
+    return { archived: "this phone's local storage" };
   },
 
   async note(tid, pageId) {
     const n = await tx(['notes'], 'readonly', (t) => req(t.objectStore('notes').get([tid, pageId])));
-    return { content: n?.content || '', hash: n?.hash || '', size: n?.size || 0, path: '保存在手机上' };
+    return { content: n?.content || '', hash: n?.hash || '', size: n?.size || 0, path: 'Saved on this phone' };
   },
 
   async saveNote(tid, pageId, body) {
     const content = String(body?.content ?? '').replace(/\r\n/g, '\n');
     const base = typeof body?.base === 'string' ? body.base : null;
     const empty = !content.trim();
-    const hash = empty ? '' : await digest(content); // 指纹要在事务外算好
+    const hash = empty ? '' : await digest(content); // the fingerprint has to be computed outside the transaction
     const size = empty ? 0 : byteSize(content);
     return tx(['notes', 'noteHistory'], 'readwrite', async (t) => {
       const store = t.objectStore('notes');
       const cur = await req(store.get([tid, pageId]));
       const curHash = cur?.hash || '';
       if (base !== null && base !== curHash) {
-        throw fail('笔记在别处改过', 409, { content: cur?.content || '', hash: curHash });
+        throw fail('The note file was changed elsewhere', 409, { content: cur?.content || '', hash: curHash });
       }
-      if (hash === curHash) return { hash: curHash, size: cur?.size || 0 }; // 内容没变（比如输入后又删掉），不算改过
+      if (hash === curHash) return { hash: curHash, size: cur?.size || 0 }; // content unchanged (e.g. typed and then deleted): not a change
       if (cur?.content && cur.content !== content) await snapshot(t, tid, pageId, cur.content, size);
-      // 清空也记下来（content 为空），以后同步时才知道这份笔记被删了；改回电脑上那份时不再算改过
+      // Clearing is recorded too (empty content) so a later sync knows the note was deleted; changing it back to the computer's version no longer counts as a change
       const from = cur?.base ?? '';
       store.put({ tid, pageId, content: empty ? '' : content, hash, size, updatedAt: Date.now(), base: from, dirty: hash !== from });
       return { hash, size };
@@ -245,8 +245,8 @@ export const local = {
   },
 };
 
-// 同步时发给电脑的改动：手机上新做的作答记录、改过的笔记、重置时间、拖动过的专题顺序，
-// 以及已有题库的指纹（指纹没变的题库电脑不再重发）
+// Changes sent to the computer when syncing: answer records made on the phone, edited notes, reset times, a dragged topic order,
+// plus the fingerprints of the question banks already here (the computer doesn't resend a bank whose fingerprint hasn't changed)
 export async function collectChanges() {
   return tx(['records', 'notes', 'kv', 'topics'], 'readonly', async (t) => {
     const records = {};
@@ -267,14 +267,14 @@ export async function collectChanges() {
   });
 }
 
-// 用电脑发回的数据更新本机（每次同步之后）。sent 是这次发出去的笔记 {「专题/页面」: 发出时的指纹}，
-// sentOrder 是这次发出去的专题顺序的拖动时间（没发就是 undefined）。
-// · 题库：电脑发来新版本就替换，没发（指纹没变）就保留；电脑上删掉的专题本机也删掉
-// · 重置时间取两边较晚的；早于它的记录不再算数：电脑来的直接删，手机上还没同步的移到本机存档
-// · 作答记录以电脑那份为准；手机上新做、还没同步的（local）保留，下次同步再上传
-// · 笔记：这次发出去、之后没再改过的换成电脑合并后的版本；同步过程中又改了的保留，下次再同步
-// · 专题顺序：用电脑发回的（电脑已经合并过发去的顺序）；同步过程中又拖动过的保留，下次再同步
-// 返回 { topics: 这次拿到新内容的专题 }
+// Updates local data with what the computer sent back (after every sync). sent holds the notes sent this time {"topic/page": fingerprint when sent},
+// sentOrder is the drag time of the topic order sent this time (undefined if none was sent).
+// · Question bank: replaced when the computer sends a new version, kept when it sends none (fingerprint unchanged); topics deleted on the computer are deleted here too
+// · Reset time: the later of the two sides wins; records older than it no longer count: those from the computer are deleted, unsynced ones from the phone move to the local archive
+// · Answer records: the computer's copy is authoritative; new unsynced ones made on the phone (local) are kept and uploaded on the next sync
+// · Notes: notes sent this time and not edited since are replaced with the computer's merged version; ones edited during the sync are kept and synced next time
+// · Topic order: use the one the computer sent back (it already merged the order that was sent); if it was dragged again during the sync, keep it and sync next time
+// Returns { topics: the topics that got new content this time }
 export async function applyBundle(bundle, sent = new Map(), sentOrder = undefined) {
   const sizes = new Map();
   for (const [tid, d] of Object.entries(bundle.data || {})) {
@@ -310,7 +310,7 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
     }
     for (const [tid, list] of byTid) {
       if (keep.has(tid)) continue;
-      stash(tid, list.filter((r) => r.local)); // 电脑上已经没有这个专题：没同步的记录移到本机存档，不再上传
+      stash(tid, list.filter((r) => r.local)); // the computer no longer has this topic: unsynced records move to the local archive and aren't uploaded
       for (const r of list) records.delete([tid, r.t, r.q]);
     }
 
@@ -324,7 +324,7 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
       const fromPc = new Set();
       for (const r of d.records || []) {
         if (typeof r.q !== 'string' || !Number.isFinite(r.t) || r.t < cutoff) continue;
-        records.put({ ...r, tid }); // 不带 local：电脑上已经有了
+        records.put({ ...r, tid }); // no local flag: the computer already has it
         fromPc.add(`${r.t}\n${r.q}`);
       }
       const expired = [];
@@ -333,7 +333,7 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
         if (r.t < cutoff) {
           if (r.local) expired.push(r);
           records.delete([tid, r.t, r.q]);
-        } else if (!r.local) records.delete([tid, r.t, r.q]); // 电脑上已经删掉
+        } else if (!r.local) records.delete([tid, r.t, r.q]); // already deleted on the computer
       }
       stash(tid, expired);
 
@@ -343,7 +343,8 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
         const cur = mine.get(pageId);
         mine.delete(pageId);
         if (!settled(cur)) {
-          // 同步过程中又改了：保留手机这份；如果电脑已经收下了发出去的那版，记住它，下次同步不会误判成两边都改过
+          // Edited again during the sync: keep the phone's copy; if the computer took the version that was sent, remember it
+          // so the next sync doesn't mistake this for both sides having changed
           if (n.hash === sent.get(`${tid}/${pageId}`)) notes.put({ ...cur, base: n.hash });
           continue;
         }
@@ -358,14 +359,14 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
           dirty: false,
         });
       }
-      for (const cur of mine.values()) if (settled(cur)) notes.delete([tid, cur.pageId]); // 电脑上没有这份
+      for (const cur of mine.values()) if (settled(cur)) notes.delete([tid, cur.pageId]); // the computer doesn't have this one
     }
     kv.put(resets, 'resets');
     kv.put(hashes, 'topicHashes');
     let list = bundle.topics || [];
     const order = await req(kv.get('topicOrder'));
     if (order && order.at !== sentOrder) {
-      // 同步过程中又拖动过：保留手机上的顺序；电脑上现在的顺序作为下次同步的 base
+      // Dragged again during the sync: keep the phone's order; the computer's current order becomes the base for the next sync
       kv.put({ ...order, base: list.map((p) => p.id) }, 'topicOrder');
       list = reorderTopics(list, order.ids);
     } else if (order) kv.delete('topicOrder');
@@ -375,7 +376,7 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
   return { topics: fresh };
 }
 
-// 手机上新增、还没合并回电脑的内容
+// What was added on the phone and hasn't been merged back into the computer yet
 export async function localChanges() {
   return tx(['records', 'notes', 'kv'], 'readonly', async (t) => {
     let records = 0;

@@ -1,5 +1,5 @@
-// 答题组件：页面练习与错题复习共用
-// 键盘：A–H 或 1–8 选择选项，0 选择不会，Enter 提交 / 下一题，← → 切换题目
+// Quiz component shared by page practice and Review
+// Keys: A–H or 1–8 pick an option, 0 picks Don't know, Enter submits / goes to the next question, ← → switch questions
 
 import { h, icon, kbd, prefs, plainText, historyMarks } from '../ui.js';
 import { md, mdInline } from '../md.js';
@@ -7,7 +7,8 @@ import * as store from '../store.js';
 import { STATE_LABEL } from '../rank.js';
 
 const LETTERS = 'ABCDEFGH';
-const sessions = new Map(); // 切换标签或页面后回来，进度还在
+const sessions = new Map(); // progress survives switching tabs or pages and coming back
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
 export function getSession(key) {
   return sessions.get(key);
@@ -25,8 +26,8 @@ export function newSession(key, items, { mode = 'page', base, single = false } =
     items,
     base: base || items,
     idx: 0,
-    answers: new Map(), // gid -> { picked:Set<原始选项下标>, unknown, submitted, ok, pick }
-    perms: new Map(), // gid -> 显示顺序（原始下标数组）
+    answers: new Map(), // gid -> { picked:Set<original option index>, unknown, submitted, ok, pick }
+    perms: new Map(), // gid -> display order (array of original indexes)
     finished: false,
   };
   for (const q of items) s.perms.set(q.gid, makePerm(q));
@@ -60,7 +61,7 @@ export function mountQuiz(container, topic, initial, opts = {}) {
   const ansOf = (q) => session.answers.get(q.gid);
   const isLast = () => session.idx === session.items.length - 1;
 
-  // 原始字母 -> 当前显示的字母
+  // original letters -> letters as currently displayed
   function disp(q, letters) {
     const perm = session.perms.get(q.gid);
     return [...letters]
@@ -81,7 +82,7 @@ export function mountQuiz(container, topic, initial, opts = {}) {
     if (top < 0) window.scrollBy({ top: top - 16 });
   }
 
-  // ── 题目 ──
+  // ── Question ──
   function track() {
     const dense = session.items.length > 60;
     return h(
@@ -95,8 +96,8 @@ export function mountQuiz(container, topic, initial, opts = {}) {
         return h('button', {
           class: cls.join(' '),
           type: 'button',
-          'aria-label': `第 ${i + 1} 题`,
-          'data-tip': `第 ${i + 1} 题`,
+          'aria-label': `Question ${i + 1}`,
+          'data-tip': `Question ${i + 1}`,
           onclick: () => go(i),
         });
       }),
@@ -143,11 +144,11 @@ export function mountQuiz(container, topic, initial, opts = {}) {
         role: q.type === 'multi' ? 'checkbox' : 'radio',
         'aria-checked': String(picked),
         'aria-disabled': a?.submitted ? 'true' : null,
-        'data-tip': '按答错记录，提交后查看答案与解析',
+        'data-tip': 'Counts as wrong; submit to see the answer and explanation',
         onclick: toggleUnknown,
       },
       h('span', { class: 'key num' }, '0'),
-      h('span', { class: 'opt-text' }, '不会'),
+      h('span', { class: 'opt-text' }, "Don't know"),
       h('span', { class: 'opt-mark' }, a?.submitted && picked ? icon('x') : null),
     );
   }
@@ -171,8 +172,8 @@ export function mountQuiz(container, topic, initial, opts = {}) {
           class: 'icon-btn',
           type: 'button',
           'aria-pressed': String(shuffleOn()),
-          'aria-label': '选项乱序',
-          'data-tip': shuffleOn() ? '选项乱序：开' : '选项乱序：关',
+          'aria-label': 'Shuffle options',
+          'data-tip': shuffleOn() ? 'Shuffle options: on' : 'Shuffle options: off',
           onclick: toggleShuffle,
         },
         icon('shuffle'),
@@ -185,7 +186,7 @@ export function mountQuiz(container, topic, initial, opts = {}) {
       h(
         'div',
         { class: 'q-meta' },
-        h('span', { class: `q-type ${q.type}` }, multi ? '多选' : '单选'),
+        h('span', { class: `q-type ${q.type}` }, multi ? 'Multiple answers' : 'Single answer'),
         session.mode !== 'page'
           ? h('a', { class: 'q-page', href: `#/p/${enc(topic.id)}/page/${enc(page.id)}` }, h('span', { class: 'num' }, page.no), page.title)
           : null,
@@ -193,7 +194,7 @@ export function mountQuiz(container, topic, initial, opts = {}) {
       h('div', { class: 'q-stem md', html: md(q.stem) }),
       h(
         'div',
-        { class: `opts ${q.type}`, role: multi ? 'group' : 'radiogroup', 'aria-label': '选项' },
+        { class: `opts ${q.type}`, role: multi ? 'group' : 'radiogroup', 'aria-label': 'Options' },
         perm.map((oi, di) => optionButton(q, a, oi, di)),
         unknownButton(q, a),
       ),
@@ -202,10 +203,10 @@ export function mountQuiz(container, topic, initial, opts = {}) {
     const actions = h(
       'div',
       { class: 'q-actions' },
-      h('button', { class: 'btn ghost', type: 'button', disabled: session.idx === 0, onclick: prev }, icon('left'), '上一题'),
+      h('button', { class: 'btn ghost', type: 'button', disabled: session.idx === 0, onclick: prev }, icon('left'), 'Previous'),
       submitted
-        ? h('button', { class: 'btn primary', type: 'button', onclick: next }, isLast() ? '完成' : '下一题', kbd('Enter'))
-        : h('button', { class: 'btn primary', type: 'button', disabled: !a?.picked.size && !a?.unknown, onclick: submit }, '提交', kbd('Enter')),
+        ? h('button', { class: 'btn primary', type: 'button', onclick: next }, isLast() ? 'Finish' : 'Next', kbd('Enter'))
+        : h('button', { class: 'btn primary', type: 'button', disabled: !a?.picked.size && !a?.unknown, onclick: submit }, 'Submit', kbd('Enter')),
     );
 
     return h('div', { class: 'quiz-q' }, top, card, submitted ? feedback(q, a) : null, actions);
@@ -220,13 +221,13 @@ export function mountQuiz(container, topic, initial, opts = {}) {
       h(
         'header',
         { class: 'fb-head' },
-        h('span', { class: 'fb-result' }, icon(a.ok ? 'check' : 'x'), a.unknown ? '不会，已按答错记录' : a.ok ? '回答正确' : '回答错误'),
-        a.ok ? null : h('span', { class: 'fb-answer' }, '正确答案', h('b', { class: 'num' }, disp(q, q.answer))),
+        h('span', { class: 'fb-result' }, icon(a.ok ? 'check' : 'x'), a.unknown ? "Don't know, counted as wrong" : a.ok ? 'Correct' : 'Incorrect'),
+        a.ok ? null : h('span', { class: 'fb-answer' }, 'Answer', h('b', { class: 'num' }, disp(q, q.answer))),
         h(
           'span',
           {
             class: 'fb-stat',
-            'data-tip': `这道题共作答 ${st.n} 次，答对 ${st.correct} 次\n复习优先级 ${st.score}（${STATE_LABEL[st.state]}）`,
+            'data-tip': `Answered ${plural(st.n, 'time')}, ${st.correct} correct\nReview priority ${st.score} (${STATE_LABEL[st.state]})`,
           },
           historyMarks(attempts, 10),
           h('span', { class: `state-chip s-${st.state}` }, STATE_LABEL[st.state], h('b', { class: 'num' }, st.score)),
@@ -248,12 +249,12 @@ export function mountQuiz(container, topic, initial, opts = {}) {
         'div',
         { class: 'kp-peek-body' },
         h('div', { class: 'md', html: md(pt.content) }),
-        h('a', { class: 'link', href: `#/p/${enc(topic.id)}/page/${enc(pageId)}?kp=${enc(pointId)}` }, '在知识点页查看'),
+        h('a', { class: 'link', href: `#/p/${enc(topic.id)}/page/${enc(pageId)}?kp=${enc(pointId)}` }, 'Open on the Learn tab'),
       ),
     );
   }
 
-  // ── 小结 ──
+  // ── Summary ──
   function summary() {
     const items = session.items;
     const answered = items.filter((q) => ansOf(q)?.submitted);
@@ -273,8 +274,8 @@ export function mountQuiz(container, topic, initial, opts = {}) {
         h(
           'div',
           { class: 'sum-meta' },
-          h('span', null, '正确率', h('b', { class: 'num' }, `${pct}%`)),
-          skipped ? h('span', null, '未作答', h('b', { class: 'num' }, skipped)) : null,
+          h('span', null, 'Accuracy', h('b', { class: 'num' }, `${pct}%`)),
+          skipped ? h('span', null, 'Unanswered', h('b', { class: 'num' }, skipped)) : null,
         ),
       ),
       track(),
@@ -282,7 +283,7 @@ export function mountQuiz(container, topic, initial, opts = {}) {
         ? h(
             'div',
             { class: 'sum-wrong' },
-            h('h3', null, '答错或不会的题'),
+            h('h3', null, "Questions you got wrong or didn't know"),
             h(
               'ol',
               null,
@@ -298,9 +299,9 @@ export function mountQuiz(container, topic, initial, opts = {}) {
                       'span',
                       { class: 'pick' },
                       ansOf(q).unknown
-                        ? h('b', { class: 'tone-weak' }, '不会')
-                        : ['选了', h('b', { class: 'num tone-weak' }, disp(q, ansOf(q).pick))],
-                      '答案',
+                        ? h('b', { class: 'tone-weak' }, "Don't know")
+                        : ['Picked', h('b', { class: 'num tone-weak' }, disp(q, ansOf(q).pick))],
+                      'Answer',
                       h('b', { class: 'num tone-good' }, disp(q, q.answer)),
                     ),
                   ),
@@ -312,9 +313,9 @@ export function mountQuiz(container, topic, initial, opts = {}) {
       h(
         'div',
         { class: 'sum-actions' },
-        wrong.length ? h('button', { class: 'btn primary', type: 'button', onclick: retryWrong }, `重练这 ${wrong.length} 题`) : null,
-        skipped ? h('button', { class: `btn${wrong.length ? '' : ' primary'}`, type: 'button', onclick: () => go(firstSkipped) }, '继续作答') : null,
-        h('button', { class: 'btn ghost', type: 'button', onclick: restart }, '全部重做'),
+        wrong.length ? h('button', { class: 'btn primary', type: 'button', onclick: retryWrong }, `Retry ${plural(wrong.length, 'question')}`) : null,
+        skipped ? h('button', { class: `btn${wrong.length ? '' : ' primary'}`, type: 'button', onclick: () => go(firstSkipped) }, 'Continue') : null,
+        h('button', { class: 'btn ghost', type: 'button', onclick: restart }, 'Redo all'),
         opts.exit
           ? opts.exit.href
             ? h('a', { class: 'btn ghost', href: opts.exit.href }, opts.exit.label)
@@ -324,7 +325,7 @@ export function mountQuiz(container, topic, initial, opts = {}) {
     );
   }
 
-  // ── 操作 ──
+  // ── Actions ──
   function toggle(oi) {
     const q = cur();
     let a = ansOf(q);
@@ -461,7 +462,7 @@ export function mountQuiz(container, topic, initial, opts = {}) {
 
   document.addEventListener('keydown', onKey);
   render();
-  // 侧栏链接等常驻元素可能还保留着焦点，那样 Enter 会触发它们；答题区挂载时接管焦点
+  // Persistent elements such as sidebar links may still have focus, and Enter would trigger them; the quiz takes focus when mounted
   root.focus({ preventScroll: true });
 
   return {

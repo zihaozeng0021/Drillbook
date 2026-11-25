@@ -40,12 +40,12 @@ import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
 
 /**
- * Drillbook 手机版：只有一个 WebView 的外壳。
+ * Drillbook for phones: a shell with nothing but a WebView.
  *
  * <ul>
- *   <li>网站代码（web/）打包在 assets/web/ 里，以 https://appassets.androidplatform.net/ 提供给 WebView，离线可用</li>
- *   <li>题库、作答记录、笔记存在 WebView 的 IndexedDB 里（App 自己的存储，卸载 App 才会清掉）</li>
- *   <li>网页通过 window.DrillbookNative 让这里代发 HTTP 请求连接电脑，只允许局域网地址</li>
+ *   <li>The site code (web/) is packed into assets/web/ and served to the WebView as https://appassets.androidplatform.net/, so it works offline</li>
+ *   <li>Topics, answer records and notes are stored in the WebView's IndexedDB (the app's own storage, cleared only when the app is uninstalled)</li>
+ *   <li>Through window.DrillbookNative the page has this class send its HTTP requests to the computer; only LAN addresses are allowed</li>
  * </ul>
  */
 public class MainActivity extends Activity {
@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
         root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         if (Build.VERSION.SDK_INT >= 30) {
-            // 自己让出状态栏、导航栏和键盘占的位置（Android 15 起 App 默认铺满整个屏幕）
+            // Keep clear of the status bar, navigation bar and keyboard ourselves (from Android 15 on, apps fill the whole screen by default)
             getWindow().setDecorFitsSystemWindows(false);
             root.setOnApplyWindowInsetsListener((v, insets) -> {
                 android.graphics.Insets i = insets.getInsets(
@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setMediaPlaybackRequiresUserGesture(true);
-        WebView.setWebContentsDebuggingEnabled(true); // 数据线连电脑时可以用 chrome://inspect 排查问题
+        WebView.setWebContentsDebuggingEnabled(true); // with a USB cable to a computer, chrome://inspect can be used to debug
         web.addJavascriptInterface(new Bridge(), "DrillbookNative");
         web.setWebViewClient(new Client());
         setContentView(root);
@@ -127,7 +127,7 @@ public class MainActivity extends Activity {
     }
 
     private class Client extends WebViewClient {
-        // 网站文件从 APK 的 assets/web/ 读取
+        // Site files are read from the APK's assets/web/
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             Uri u = request.getUrl();
@@ -147,7 +147,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        // 站外链接用系统浏览器打开，不在 App 里打开
+        // External links open in the system browser, not inside the app
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             Uri u = request.getUrl();
@@ -155,7 +155,7 @@ public class MainActivity extends Activity {
             try {
                 startActivity(new Intent(Intent.ACTION_VIEW, u));
             } catch (ActivityNotFoundException ignored) {
-                // 没有能打开它的应用
+                // no app can open it
             }
             return true;
         }
@@ -172,12 +172,12 @@ public class MainActivity extends Activity {
                 o.put("manufacturer", Build.MANUFACTURER);
                 o.put("sdk", Build.VERSION.SDK_INT);
             } catch (Exception ignored) {
-                // 拿不到就少几项
+                // whatever can't be read is left out
             }
             return o.toString();
         }
 
-        // 在后台线程发请求，完成后调用网页里的 window.__drillbookNative(id, status)；正文用 take(id) 取
+        // Sends the request on a background thread, then calls window.__drillbookNative(id, status) in the page; the body is fetched with take(id)
         @JavascriptInterface
         public void request(final String id, final String method, final String url, final String headers,
                             final String body, final int timeout) {
@@ -187,7 +187,7 @@ public class MainActivity extends Activity {
                 HttpURLConnection c = null;
                 try {
                     URL target = new URL(url);
-                    if (!allowed(target)) throw new IOException("只允许连接局域网里的电脑");
+                    if (!allowed(target)) throw new IOException("Only computers on the local network are allowed");
                     c = (HttpURLConnection) target.openConnection();
                     int t = Math.max(1000, timeout);
                     c.setConnectTimeout(Math.min(t, 10000));
@@ -233,7 +233,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    // 只允许 http(s) 访问局域网 IPv4 地址（10.x、172.16-31.x、192.168.x）和本机
+    // Only http(s) to LAN IPv4 addresses (10.x, 172.16-31.x, 192.168.x) and this device
     private static boolean allowed(URL u) {
         String p = u.getProtocol();
         if (!"http".equals(p) && !"https".equals(p)) return false;

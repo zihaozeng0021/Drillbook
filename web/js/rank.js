@@ -1,19 +1,19 @@
-// 错题复习的排序算法
+// Ranking algorithm for Review
 //
-// 每道题的优先级 P = 平滑后的「近期加权错误率」
+// Each question's priority P = its smoothed "recency-weighted error rate"
 //
-//   1) 每次作答的权重  w = 0.5^(距今天数 / HALF_LIFE) × ORDER_DECAY^(这次之后又作答的次数)
-//        时间衰减：HALF_LIFE 天前的作答，权重减半（越近越重要）
-//        次序衰减：同一天内反复练习时，以最新的几次为准
-//   2) E = 答错的权重之和，C = 答对的权重之和
-//   3) P = (E + K·P0) / (E + C + K)      贝叶斯平滑：相当于每题预置 K 次、错误率为 P0 的虚拟作答
+//   1) Weight of each attempt  w = 0.5^(days ago / HALF_LIFE) × ORDER_DECAY^(number of attempts after this one)
+//        Time decay: an attempt HALF_LIFE days ago counts half (the more recent, the more it matters)
+//        Order decay: when practicing repeatedly on the same day, the latest few attempts dominate
+//   2) E = sum of the weights of wrong answers, C = sum of the weights of correct answers
+//   3) P = (E + K·P0) / (E + C + K)      Bayesian smoothing: as if each question started with K virtual attempts at error rate P0
 //
-// 性质：
-//   · 没做过的题 P = P0（40），排在中间
-//   · P > P0 ⇔ 近期加权错误率超过 40%，归为「薄弱」，排在未做题之前
-//   · 当天答错后立刻答对一次，P 仍高于 P0；隔一天以上再答对，才会降到 P0 以下
-//   · 长期不练，所有证据衰减，P 慢慢回到 P0：答错过的从上方回落，答对过的从下方回升
-//   · 一直答对的题 P 最低，排在最后，但仍然包含在列表里
+// Properties:
+//   · A question never answered has P = P0 (40) and sits in the middle
+//   · P > P0 ⇔ the recency-weighted error rate is above 40%; classed as "Weak", ranked before New questions
+//   · Answering correctly right after a wrong answer on the same day still leaves P above P0; only a correct answer a day or more later brings it below P0
+//   · With no practice for a long time all evidence decays and P drifts back to P0: questions answered wrong come down from above, ones answered right rise from below
+//   · Questions that are always answered correctly have the lowest P and come last, but are still included in the list
 
 export const RANK = {
   HALF_LIFE_DAYS: 7,
@@ -26,7 +26,7 @@ export const RANK = {
 const DAY = 86_400_000;
 
 export const STATES = ['weak', 'new', 'fair', 'good'];
-export const STATE_LABEL = { weak: '薄弱', new: '未做', fair: '一般', good: '掌握' };
+export const STATE_LABEL = { weak: 'Weak', new: 'New', fair: 'Fair', good: 'Mastered' };
 
 export function scoreAttempts(attempts, now = Date.now()) {
   const n = attempts.length;
@@ -56,14 +56,14 @@ export function scoreAttempts(attempts, now = Date.now()) {
   return { n, correct, E, C, P, score: Math.round(P * 100), state, last, lastWrongT };
 }
 
-// questions: 全部题目（带 gid、order）；attempts: Map<gid, 按时间升序的作答记录>
+// questions: all questions (with gid, order); attempts: Map<gid, answer records in ascending time order>
 export function computeStats(questions, attempts, now = Date.now()) {
   const map = new Map();
   for (const q of questions) map.set(q.gid, scoreAttempts(attempts.get(q.gid) || [], now));
   return map;
 }
 
-// 按优先级从高到低排序；同分时：最近一次答错的在前 → 最近作答的在前 → 题库原始顺序
+// Sorts by priority, highest first; on a tie: last answer wrong first → most recently answered first → original question bank order
 export function rankQuestions(questions, stats) {
   return [...questions].sort((a, b) => {
     const sa = stats.get(a.gid);
@@ -83,7 +83,7 @@ export function countStates(questions, stats) {
   return c;
 }
 
-// 一个知识点的状态：关联题目里有薄弱即薄弱；全未做为未做；全掌握为掌握；其余一般
+// State of a knowledge point: Weak if any linked question is Weak; New if all are New; Mastered if all are Mastered; otherwise Fair
 export function aggregateState(states) {
   if (!states.length) return 'new';
   if (states.includes('weak')) return 'weak';

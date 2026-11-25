@@ -1,27 +1,28 @@
-// 思维导图：专题 → 分组 → 页面 → 知识点 → 要点。内容来自专题文件夹里的 mindmap.md（server.py 解析成树）
-//   · 两种显示方式：导图（从左往右展开，连线用 SVG 画）和大纲（缩进的树，窄屏默认用它）
-//   · 点节点展开 / 收起；页面和知识点节点右侧的箭头打开正文；页面、知识点按题目状态着色
-//   · 展开状态和滚动位置在这次打开期间保留，从正文返回时恢复
-//   · ?page=<页面>&kp=<知识点>：展开并定位到这个节点（站内链接可以直接指向导图里的某个节点）
+// Mind map: topic → group → page → knowledge point → key points. Content comes from mindmap.md in the topic folder (server.py parses it into a tree)
+//   · Two views: map (expands left to right, links drawn in SVG) and outline (an indented tree, the default on narrow screens)
+//   · Click a node to expand / collapse; the arrow on the right of page and knowledge point nodes opens the text; pages and knowledge points are colored by question state
+//   · Expanded nodes and scroll position are kept while the app stays open and restored when coming back from the text
+//   · ?page=<page>&kp=<point>: expand to and scroll to that node (in-site links can point straight at a node in the map)
 
 import { h, icon, stateBar, plainText, prefs } from '../ui.js';
 import { mdInline } from '../md.js';
 import * as store from '../store.js';
 import { STATES, STATE_LABEL, aggregateState } from '../rank.js';
 
-const sessions = new Map(); // 专题 id → { open: 展开的节点, map: 导图里的滚动位置, win: 页面的滚动位置 }
+const sessions = new Map(); // topic id → { open: expanded nodes, map: scroll position in the map, win: page scroll position }
 const NARROW = '(max-width: 900px)';
 const LEVELS = [
-  ['page', '页面'],
-  ['point', '知识点'],
-  ['all', '全部'],
+  ['page', 'Pages'],
+  ['point', 'Knowledge points'],
+  ['all', 'All'],
 ];
 const MODES = [
-  ['map', '导图'],
-  ['outline', '大纲'],
+  ['map', 'Map'],
+  ['outline', 'Outline'],
 ];
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const enc = encodeURIComponent;
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
 function svg(tag, attrs, ...children) {
   const el = document.createElementNS(SVG_NS, tag);
@@ -32,7 +33,7 @@ function svg(tag, attrs, ...children) {
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 
-// 把服务端的树包装成带状态的节点。kind：root、group（下面还有页面或知识点）、page、point、text（要点）
+// Wrap the server's tree in nodes with state. kind: root, group (has pages or knowledge points below), page, point, text (key point)
 function buildTree(topic, base) {
   const byPoint = new Map();
   for (const q of topic.questions) {
@@ -69,7 +70,7 @@ function buildTree(topic, base) {
   return { root, all, byKey: new Map(all.map((n) => [n.key, n])) };
 }
 
-// 「展开到」某一层：页面 = 页面节点都看得到、但不展开；知识点 = 知识点都看得到；全部 = 全部展开
+// "Expand to" a level: Pages = every page node visible but not expanded; Knowledge points = every knowledge point visible; All = everything expanded
 function levelOpen(all, level) {
   const want = level === 'all' ? (n) => n.kids.length > 0 : level === 'point' ? (n) => n.hasPoint : (n) => n.hasPage;
   return new Set(all.filter(want).map((n) => n.key));
@@ -82,9 +83,9 @@ export function renderMindmap(main, topic, params) {
       h(
         'div',
         { class: 'empty' },
-        h('h2', null, '这个专题还没有思维导图'),
-        h('p', null, `在 ${topic.path}/mindmap.md 中编写（格式见 AGENTS.md），刷新页面即可看到。`),
-        h('a', { class: 'btn', href: base }, '返回总览'),
+        h('h2', null, 'This topic has no mind map yet'),
+        h('p', null, `Write one in ${topic.path}/mindmap.md (format in AGENTS.md), then reload the page to see it.`),
+        h('a', { class: 'btn', href: base }, 'Back to overview'),
       ),
     );
     return {};
@@ -101,8 +102,8 @@ export function renderMindmap(main, topic, params) {
   const mq = window.matchMedia(NARROW);
   let mode = prefs.get('mindmap.mode', null) || (mq.matches ? 'outline' : 'map');
 
-  // ── 节点 ──
-  // 节点 = 展开 / 收起的按钮（编号、状态、文字、下级数）+ 打开正文的箭头；两者分开，不嵌套
+  // ── Nodes ──
+  // A node = an expand / collapse button (number, state, text, child count) + an arrow that opens the text; the two are separate, not nested
   function nodeEl(n) {
     const fold = n.kids.length > 0;
     const pg = n.kind === 'page' ? topic.pageById.get(n.page) : null;
@@ -125,8 +126,8 @@ export function renderMindmap(main, topic, params) {
             {
               class: 'mm-go',
               href: n.href,
-              'aria-label': `${n.point ? '打开知识点' : '打开页面'}：${n.plain}`,
-              'data-tip': n.point ? '打开知识点' : '打开这一页',
+              'aria-label': `${n.point ? 'Open knowledge point' : 'Open page'}: ${n.plain}`,
+              'data-tip': n.point ? 'Open knowledge point' : 'Open this page',
             },
             icon('open'),
           )
@@ -147,15 +148,15 @@ export function renderMindmap(main, topic, params) {
   const canvas = h('div', { class: 'mm-canvas' }, linkLayer, tree);
   const view = h('div', { class: 'mm-view panel' }, canvas);
 
-  // ── 工具栏 ──
+  // ── Toolbar ──
   const levelBtns = levels.map(([k, label]) => h('button', { type: 'button', 'data-level': k, onclick: () => setLevel(k) }, label));
   const modeBtns = MODES.map(([k, label]) => h('button', { type: 'button', 'data-mode': k, onclick: () => setMode(k) }, label));
-  const input = h('input', { type: 'search', placeholder: '搜索', 'aria-label': '在思维导图中搜索', autocomplete: 'off', spellcheck: 'false' });
+  const input = h('input', { type: 'search', placeholder: 'Search', 'aria-label': 'Search the mind map', autocomplete: 'off', spellcheck: 'false' });
   const hitCount = h('span', { class: 'mm-hits num', 'aria-live': 'polite' });
   const head = h(
     'header',
     { class: 'mm-head' },
-    h('h1', null, '思维导图'),
+    h('h1', null, 'Mind map'),
     h(
       'div',
       { class: 'mm-tools' },
@@ -163,27 +164,27 @@ export function renderMindmap(main, topic, params) {
       h(
         'div',
         { class: 'mm-ctl' },
-        h('span', null, '展开到'),
-        h('div', { class: 'seg-ctl', role: 'group', 'aria-label': '展开到' }, levelBtns),
+        h('span', null, 'Expand to'),
+        h('div', { class: 'seg-ctl', role: 'group', 'aria-label': 'Expand to' }, levelBtns),
       ),
-      h('div', { class: 'seg-ctl', role: 'group', 'aria-label': '显示方式' }, modeBtns),
+      h('div', { class: 'seg-ctl', role: 'group', 'aria-label': 'View mode' }, modeBtns),
     ),
   );
   const rootEl = h('div', { class: 'mindmap' }, head, view);
   main.append(rootEl);
 
-  // ── 绘制 ──
+  // ── Drawing ──
   function paintStates() {
     const s = store.stats(topic);
     for (const n of all) {
       if (n.dot) {
         const st = aggregateState(n.qs.map((q) => s.get(q.gid).state));
         n.dot.className = `dot s-${st}`;
-        n.dot.dataset.tip = n.qs.length ? `${STATE_LABEL[st]}　${n.qs.length} 道题` : '还没有题目';
+        n.dot.dataset.tip = n.qs.length ? `${STATE_LABEL[st]} · ${plural(n.qs.length, 'question')}` : 'No questions yet';
       } else if (n.bar && n.qs.length) {
         const c = store.counts(topic, n.qs);
         n.bar.replaceChildren(stateBar(c));
-        n.bar.dataset.tip = STATES.map((st) => `${STATE_LABEL[st]} ${c[st]}`).join('　');
+        n.bar.dataset.tip = STATES.map((st) => `${STATE_LABEL[st]} ${c[st]}`).join(' · ');
       }
     }
   }
@@ -218,7 +219,7 @@ export function renderMindmap(main, topic, params) {
     }
   }
 
-  // 连线：父节点右侧中点到子节点左侧中点的三次贝塞尔曲线；按层级分三组，靠近根的粗一些
+  // Links: cubic Bezier curves from the middle of the parent's right edge to the middle of the child's left edge; three groups by depth, thicker near the root
   function draw() {
     if (mode !== 'map') {
       for (const p of links) p.setAttribute('d', '');
@@ -260,8 +261,8 @@ export function renderMindmap(main, topic, params) {
   ro.observe(tree);
   ro.observe(view);
 
-  // ── 定位 ──
-  // 导图：根节点放在视野左侧、上下居中；大纲：回到顶部
+  // ── Positioning ──
+  // Map: root node at the left of the view, vertically centered; outline: back to the top
   function home() {
     if (mode === 'map') {
       const v = view.getBoundingClientRect();
@@ -273,7 +274,7 @@ export function renderMindmap(main, topic, params) {
     }
   }
 
-  // 把节点滚进视野；force 为 false 时，已经完整可见就不动
+  // Scroll a node into view; with force false, leave it alone if it is already fully visible
   function reveal(n, force) {
     const b = n.label.getBoundingClientRect();
     if (mode === 'map') {
@@ -289,7 +290,7 @@ export function renderMindmap(main, topic, params) {
 
   function flash(n) {
     n.label.classList.remove('flash');
-    void n.label.offsetWidth; // 重新触发动画
+    void n.label.offsetWidth; // restart the animation
     n.label.classList.add('flash');
   }
 
@@ -313,7 +314,7 @@ export function renderMindmap(main, topic, params) {
     );
   }
 
-  // ── 操作 ──
+  // ── Actions ──
   function toggle(n) {
     const open = !state.open.has(n.key);
     const before = n.label.getBoundingClientRect();
@@ -322,12 +323,12 @@ export function renderMindmap(main, topic, params) {
     n.el.classList.toggle('closed', !open);
     n.btn.setAttribute('aria-expanded', String(open));
     if (mode === 'map') {
-      // 展开或收起之后，被点的节点留在原来的位置
+      // after expanding or collapsing, keep the clicked node where it was
       const after = n.label.getBoundingClientRect();
       view.scrollTop += after.top - before.top;
       view.scrollLeft += after.left - before.left;
       if (open) {
-        // 新展开的下级超出右边时往右滚一点，但不把节点自己滚出视野
+        // if the newly shown children overflow on the right, scroll right a little, but never so far that the node itself leaves the view
         const v = view.getBoundingClientRect();
         const now = n.label.getBoundingClientRect();
         const over = n.el.lastElementChild.getBoundingClientRect().right - v.right + 24;
@@ -353,10 +354,10 @@ export function renderMindmap(main, topic, params) {
     home();
   }
 
-  // ── 搜索：命中的节点全部展开出来并高亮，回车跳到下一处 ──
+  // ── Search: every matching node is revealed and highlighted; Enter jumps to the next match ──
   let hits = [];
   let hit = -1;
-  let before = null; // 搜索前的展开状态，清空搜索时恢复
+  let before = null; // expanded nodes before the search, restored when it is cleared
   let timer = 0;
 
   function unmark() {
@@ -376,13 +377,13 @@ export function renderMindmap(main, topic, params) {
     for (const n of hits) {
       for (let p = n.parent; p; p = p.parent) {
         open.add(p.key);
-        p.label.classList.add('trail'); // 通往命中节点的上级不变暗
+        p.label.classList.add('trail'); // ancestors on the way to a match are not dimmed
       }
     }
     state.open = open;
     tree.classList.add('searching');
     for (const n of hits) n.label.classList.add('hit');
-    hitCount.textContent = hits.length ? '' : '没有找到';
+    hitCount.textContent = hits.length ? '' : 'No matches';
     paintOpen();
     if (hits.length) step(1);
   }
@@ -429,8 +430,8 @@ export function renderMindmap(main, topic, params) {
   });
 
   tree.addEventListener('click', (e) => {
-    if (e.target.closest('a')) return; // 箭头和要点里的链接照常跳转
-    if (String(window.getSelection?.() || '')) return; // 正在选中文字
+    if (e.target.closest('a')) return; // the arrow and links inside key points navigate as usual
+    if (String(window.getSelection?.() || '')) return; // text is being selected
     const label = e.target.closest('.mm-label');
     const n = label && byKey.get(label.dataset.key);
     if (!n) return;
@@ -444,11 +445,11 @@ export function renderMindmap(main, topic, params) {
     }
   });
 
-  // 导图里按住空白处拖动来平移（鼠标；触屏本来就能直接滑动）
+  // In the map, drag on empty space to pan (mouse only; touch screens can already swipe)
   view.addEventListener('pointerdown', (e) => {
     if (mode !== 'map' || e.pointerType !== 'mouse' || e.button !== 0) return;
     if (e.target.closest('.mm-label')) return;
-    if (e.target === view && (e.offsetX >= view.clientWidth || e.offsetY >= view.clientHeight)) return; // 滚动条
+    if (e.target === view && (e.offsetX >= view.clientWidth || e.offsetY >= view.clientHeight)) return; // scrollbar
     const x = e.clientX;
     const y = e.clientY;
     const sl = view.scrollLeft;
@@ -471,7 +472,7 @@ export function renderMindmap(main, topic, params) {
     e.preventDefault();
   });
 
-  // 没有手动选过显示方式时，跟着窗口宽度切换
+  // Unless a view mode was picked by hand, follow the window width
   const onWidth = () => {
     if (prefs.get('mindmap.mode', null)) return;
     mode = mq.matches ? 'outline' : 'map';
@@ -483,14 +484,14 @@ export function renderMindmap(main, topic, params) {
 
   const off = store.on('records', (p) => p === topic && paintStates());
 
-  // ── 初始状态：定位到指定节点，或者恢复上次离开时的位置 ──
+  // ── Initial state: go to the requested node, or restore where you left off ──
   applyMode();
   paintStates();
   paintOpen();
   const target = findTarget();
   if (target) {
     focusOn(target);
-    // 去掉地址里的定位参数：从正文返回这里时恢复离开时的位置，而不是再定位一次
+    // drop the target parameters from the URL: coming back here from the text restores where you left off instead of targeting again
     history.replaceState(history.state, '', `${base}/map`);
   } else if (state.map) {
     view.scrollLeft = state.map.x;

@@ -1,4 +1,4 @@
-// 单个页面：知识点 / 本页练习
+// A single page: knowledge points / practice
 
 import { h, icon, cell, plainText } from '../ui.js';
 import { md } from '../md.js';
@@ -8,44 +8,46 @@ import { getSession, newSession, mountQuiz } from './quiz.js';
 import { mountKnowledgeEditor } from './editor.js';
 import { APP } from '../native.js';
 
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
 export function renderPage(main, topic, pageId, tab, params, shell) {
   const page = topic.pageById.get(pageId);
   const base = `#/p/${encodeURIComponent(topic.id)}`;
   if (!page) {
     main.append(
-      h('div', { class: 'empty' }, h('h2', null, '找不到这个页面'), h('a', { class: 'btn', href: base }, '返回总览')),
+      h('div', { class: 'empty' }, h('h2', null, 'Page not found'), h('a', { class: 'btn', href: base }, 'Back to overview')),
     );
     return {};
   }
   const pageHref = `${base}/page/${encodeURIComponent(page.id)}`;
 
-  // 笔记开关：面板本身由外框持有，切换标签时不会重建
+  // Notes toggle: the panel itself belongs to the shell, so switching tabs does not rebuild it
   const panel = shell.notes;
   const notesBtn = h(
     'button',
     { class: 'notes-toggle', type: 'button', onclick: () => panel.toggle() },
     icon('note'),
-    h('span', { class: 'lbl' }, '笔记'),
+    h('span', { class: 'lbl' }, 'Notes'),
     h('i', { class: 'has-dot', 'aria-hidden': 'true' }),
   );
   const paintNotesBtn = () => {
     const has = page.noteSize > 0;
     notesBtn.setAttribute('aria-pressed', String(panel.visible));
     notesBtn.classList.toggle('has', has);
-    notesBtn.setAttribute('aria-label', has ? '笔记（已有内容）' : '笔记');
+    notesBtn.setAttribute('aria-label', has ? 'Notes (has content)' : 'Notes');
   };
   paintNotesBtn();
   const offNotes = panel.onChange(paintNotesBtn);
 
-  // 编辑本页的 knowledge.md：?edit=1 进入编辑模式，退出按钮在编辑器里（手机 App 里只读，不提供）
+  // Edit this page's knowledge.md: ?edit=1 enters edit mode and the exit button lives in the editor (not offered in the phone app, which is read-only)
   const editing = !APP && tab === 'learn' && params.get('edit') === '1';
   const editLink = editing || APP
     ? null
     : h(
         'a',
-        { class: 'notes-toggle edit-link', href: `${pageHref}?edit=1`, 'data-tip': '直接修改这一页的 knowledge.md' },
+        { class: 'notes-toggle edit-link', href: `${pageHref}?edit=1`, 'data-tip': "Edit this page's knowledge.md directly" },
         icon('edit'),
-        h('span', { class: 'lbl' }, '编辑'),
+        h('span', { class: 'lbl' }, 'Edit'),
       );
 
   const head = h(
@@ -59,8 +61,8 @@ export function renderPage(main, topic, pageId, tab, params, shell) {
       h(
         'p',
         { class: 'pg-meta' },
-        h('span', null, h('b', { class: 'num' }, page.points.length), ' 个知识点'),
-        h('span', null, h('b', { class: 'num' }, page.questions.length), ' 道题'),
+        h('span', null, h('b', { class: 'num' }, page.points.length), page.points.length === 1 ? ' knowledge point' : ' knowledge points'),
+        h('span', null, h('b', { class: 'num' }, page.questions.length), page.questions.length === 1 ? ' question' : ' questions'),
       ),
     ),
     h(
@@ -69,11 +71,11 @@ export function renderPage(main, topic, pageId, tab, params, shell) {
       h(
         'nav',
         { class: 'tabs', role: 'tablist' },
-        h('a', { class: `tab${tab === 'learn' ? ' active' : ''}`, href: pageHref, role: 'tab', 'aria-selected': String(tab === 'learn') }, '知识点'),
+        h('a', { class: `tab${tab === 'learn' ? ' active' : ''}`, href: pageHref, role: 'tab', 'aria-selected': String(tab === 'learn') }, 'Learn'),
         h(
           'a',
           { class: `tab${tab === 'quiz' ? ' active' : ''}`, href: `${pageHref}/quiz`, role: 'tab', 'aria-selected': String(tab === 'quiz') },
-          '练习',
+          'Practice',
           h('span', { class: 'tab-count num' }, page.questions.length),
         ),
       ),
@@ -119,7 +121,7 @@ function learnTab(body, topic, page, pageHref, focusPoint) {
 
   const toc = h(
     'nav',
-    { class: 'toc', 'aria-label': '知识点目录' },
+    { class: 'toc', 'aria-label': 'Knowledge point contents' },
     page.points.map((pt) => {
       const a = h(
         'a',
@@ -145,7 +147,7 @@ function learnTab(body, topic, page, pageHref, focusPoint) {
       cellBoxes.get(pt.id).replaceChildren(
         ...qs.map((q) => {
           const st = s.get(q.gid);
-          return cell(st.state, `${STATE_LABEL[st.state]}　${plainText(q.stem, 50)}`);
+          return cell(st.state, `${STATE_LABEL[st.state]} · ${plainText(q.stem, 50)}`);
         }),
       );
       const agg = aggregateState(qs.map((q) => s.get(q.gid).state));
@@ -158,12 +160,12 @@ function learnTab(body, topic, page, pageHref, focusPoint) {
     'article',
     { class: 'kn' },
     page.intro ? h('div', { class: 'md kn-intro', html: md(page.intro) }) : null,
-    sections.length ? sections : h('p', { class: 'muted' }, `这个页面还没有知识点。编辑 ${page.dir}/knowledge.md，用「## 标题 {#id}」开始一个知识点。`),
+    sections.length ? sections : h('p', { class: 'muted' }, `This page has no knowledge points yet. Edit ${page.dir}/knowledge.md and start one with "## Title {#id}".`),
     page.questions.length
       ? h(
           'div',
           { class: 'kn-end' },
-          h('a', { class: 'btn primary', href: `${pageHref}/quiz` }, icon('play'), `做本页 ${page.questions.length} 道题`),
+          h('a', { class: 'btn primary', href: `${pageHref}/quiz` }, icon('play'), `Practice ${plural(page.questions.length, 'question')}`),
         )
       : null,
   );
@@ -171,7 +173,7 @@ function learnTab(body, topic, page, pageHref, focusPoint) {
   body.append(h('div', { class: 'kn-layout' }, article, page.points.length > 1 ? toc : null));
   paintStates();
 
-  // 目录随滚动高亮：取顶部越过视口 30% 处的最后一个知识点；滚到底时取最后一个
+  // Highlight the contents entry while scrolling: the last knowledge point whose top is above 30% of the viewport; at the bottom, the last one
   let raf = 0;
   const spy = () => {
     raf = 0;
@@ -214,7 +216,7 @@ function learnTab(body, topic, page, pageHref, focusPoint) {
 
 function quizTab(body, topic, page, pageHref) {
   if (!page.questions.length) {
-    body.append(h('p', { class: 'muted' }, `本页还没有题目。在 ${page.dir}/questions.json 中添加。`));
+    body.append(h('p', { class: 'muted' }, `This page has no questions yet. Add them in ${page.dir}/questions.json.`));
     return {};
   }
   const key = `${topic.id}:page:${page.id}`;
@@ -230,6 +232,6 @@ function quizTab(body, topic, page, pageHref) {
       s.sig = sig;
       return s;
     },
-    exit: { label: '回到知识点', href: pageHref },
+    exit: { label: 'Back to knowledge points', href: pageHref },
   });
 }

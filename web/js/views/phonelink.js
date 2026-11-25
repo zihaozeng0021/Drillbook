@@ -1,7 +1,9 @@
-// 电脑网页里的「连接手机」：打开局域网端口、显示电脑地址和配对码、管理已配对的手机
+// "Connect phone" in the computer's web page: open the LAN port, show the computer address and pairing code, manage paired phones
 
 import { h, icon, modal, toast, relTime } from '../ui.js';
 import { phoneAdmin } from '../api.js';
+
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
 export function openPhoneDialog() {
   const body = h('div', { class: 'phone-admin' });
@@ -30,7 +32,7 @@ export function openPhoneDialog() {
     paint(true);
   }
 
-  // 每隔几秒刷新一次（看到新配对的手机）；内容没变就不重画，免得打断选中复制
+  // Refresh every few seconds (to show newly paired phones); skip the redraw when nothing changed, so selecting and copying isn't interrupted
   function paint(force = false) {
     const minute = Math.floor(Date.now() / 60000);
     const sig = JSON.stringify(status) + minute;
@@ -40,8 +42,8 @@ export function openPhoneDialog() {
   }
 
   function content() {
-    if (!status) return [h('p', { class: 'muted' }, '读取中…')];
-    if (status.failed) return [h('p', null, icon('warn'), ` 读取失败：${status.failed}`)];
+    if (!status) return [h('p', { class: 'muted' }, 'Loading…')];
+    if (status.failed) return [h('p', null, icon('warn'), ` Load failed: ${status.failed}`)];
     const on = status.enabled && status.running;
     const out = [
       h(
@@ -50,89 +52,89 @@ export function openPhoneDialog() {
         h(
           'div',
           null,
-          h('b', null, '允许手机连接'),
-          h('p', { class: 'muted small' }, on ? '同一个 Wi-Fi 下的手机可以用配对码连接这台电脑' : '关闭时手机连不上这台电脑'),
+          h('b', null, 'Allow phone connections'),
+          h('p', { class: 'muted small' }, on ? 'Phones on the same Wi-Fi can connect to this computer with a pairing code' : "While this is off, phones can't connect to this computer"),
         ),
         h('button', {
           class: 'switch',
           type: 'button',
           role: 'switch',
           'aria-checked': String(status.enabled),
-          'aria-label': '允许手机连接',
+          'aria-label': 'Allow phone connections',
           onclick: () => act(() => phoneAdmin.setEnabled(!status.enabled)),
         }, h('span', { class: 'knob' })),
       ),
     ];
     if (status.enabled && !status.running) {
-      out.push(h('p', null, icon('warn'), ` 没能开启：${status.error || '原因不明'}`));
+      out.push(h('p', null, icon('warn'), ` Couldn't turn it on: ${status.error || 'unknown reason'}`));
     }
     if (!on) return out;
 
     const addrs = status.addresses.map((ip) => `${ip}:${status.port}`);
     out.push(
       section(
-        '手机上填的电脑地址',
+        'Computer address to enter on the phone',
         addrs.length
           ? addrs.map((a, i) => h('code', { class: `phone-addr${i ? ' alt' : ''}` }, a))
-          : h('p', null, '没有找到局域网地址：确认这台电脑已经连上 Wi-Fi'),
+          : h('p', null, 'No LAN address found: make sure this computer is connected to Wi-Fi'),
       ),
     );
 
     const code = status.code;
     out.push(
       section(
-        '配对码',
+        'Pairing code',
         code
           ? h(
               'div',
               { class: 'phone-line' },
               h('span', { class: 'phone-code num' }, code.value.replace(/^(\d{3})(\d{3})$/, '$1 $2')),
-              h('span', { class: 'muted small' }, `${Math.max(1, Math.ceil((code.expires - Date.now()) / 60000))} 分钟内有效，用一次就失效`),
-              h('button', { class: 'link-btn', type: 'button', onclick: () => act(phoneAdmin.newCode) }, '换一个'),
+              h('span', { class: 'muted small' }, `Expires in ${plural(Math.max(1, Math.ceil((code.expires - Date.now()) / 60000)), 'minute')}, works only once`),
+              h('button', { class: 'link-btn', type: 'button', onclick: () => act(phoneAdmin.newCode) }, 'New code'),
             )
-          : h('button', { class: 'btn sm', type: 'button', onclick: () => act(phoneAdmin.newCode) }, '生成配对码'),
+          : h('button', { class: 'btn sm', type: 'button', onclick: () => act(phoneAdmin.newCode) }, 'Generate pairing code'),
       ),
     );
 
     out.push(
       section(
-        '已配对的手机',
+        'Paired phones',
         status.devices.length
           ? status.devices.map((d) =>
               h(
                 'div',
                 { class: 'phone-dev' },
                 h('span', null, d.name),
-                h('span', { class: 'muted small' }, `上次连接 ${relTime(d.lastSeen)}`),
-                h('button', { class: 'link-btn', type: 'button', onclick: () => act(() => phoneAdmin.removeDevice(d.id)) }, '移除'),
+                h('span', { class: 'muted small' }, `Last connected ${relTime(d.lastSeen)}`),
+                h('button', { class: 'link-btn', type: 'button', onclick: () => act(() => phoneAdmin.removeDevice(d.id)) }, 'Remove'),
               ),
             )
-          : h('p', { class: 'muted' }, '还没有'),
+          : h('p', { class: 'muted' }, 'None yet'),
       ),
     );
 
-    const apkUrl = `http://${status.addresses[0] || '电脑地址'}:${status.port}/drillbook.apk`;
+    const apkUrl = `http://${status.addresses[0] || '<computer-address>'}:${status.port}/drillbook.apk`;
     out.push(
       section(
-        '安装 App（安卓）',
+        'Install the app (Android)',
         status.apk
           ? [
-              h('p', null, '用手机浏览器打开下面的地址，下载后安装：'),
+              h('p', null, 'Open this address in the phone browser, then install the downloaded file:'),
               h('code', { class: 'phone-addr' }, apkUrl),
               h(
                 'p',
                 { class: 'muted small' },
-                `安装包 ${(status.apk.size / 1048576).toFixed(1)} MB，${relTime(status.apk.mtime)}打包。浏览器提示文件可能有风险时选「仍然下载」；安装时按提示允许浏览器安装应用。`,
+                `Package ${(status.apk.size / 1048576).toFixed(1)} MB, built ${relTime(status.apk.mtime)}. If the browser warns that the file may be harmful, choose "Download anyway"; during installation, allow the browser to install apps when prompted.`,
               ),
             ]
-          : h('p', null, '还没有打包 App：在项目文件夹里运行 python android/build.py。'),
+          : h('p', null, 'The app has not been built yet: run python android/build.py in the project folder.'),
       ),
     );
     out.push(
       h(
         'p',
         { class: 'muted small' },
-        '手机连不上时：确认手机和电脑连的是同一个 Wi-Fi。学校、咖啡店的 Wi-Fi 一般不允许设备之间互连，可以让电脑连手机热点。',
+        "If the phone can't connect: make sure the phone and computer are on the same Wi-Fi. School and coffee shop Wi-Fi usually blocks connections between devices; you can connect the computer to the phone's hotspot instead.",
       ),
     );
     return out;
@@ -140,12 +142,12 @@ export function openPhoneDialog() {
 
   paint();
   refresh().then(() => {
-    if (status?.running && !status.code) act(phoneAdmin.newCode); // 打开时没有有效的配对码，就生成一个
+    if (status?.running && !status.code) act(phoneAdmin.newCode); // no valid pairing code when the dialog opens: generate one
   });
   const timer = setInterval(() => {
     if (!busy) refresh();
   }, 3000);
-  modal({ title: '连接手机', body, actions: [{ label: '关闭', value: null }] }).then(() => clearInterval(timer));
+  modal({ title: 'Connect phone', body, actions: [{ label: 'Close', value: null }] }).then(() => clearInterval(timer));
 }
 
 function section(title, children) {

@@ -1,5 +1,6 @@
-// 手机 App 自动同步：打开 App 时、回到前台时、离开 App 前（有没同步的改动时），以及有改动时每隔几分钟。
-// 连不上电脑（不在同一个 Wi-Fi、电脑没开着）就安静地跳过，状态显示在专题列表顶部。
+// Phone app auto-sync: when the app opens, when it comes back to the foreground, before leaving the app (if there are
+// unsynced changes), and every few minutes while there are changes.
+// If the computer can't be reached (not on the same Wi-Fi, computer not running) it quietly skips; the status shows at the top of the topic list.
 
 import { APP } from './native.js';
 import { sync, getLink } from './phone.js';
@@ -7,7 +8,7 @@ import { kvGet, localChanges } from './local.js';
 import * as store from './store.js';
 import { reloadOpenNotes } from './views/notes.js';
 
-// state：idle（还没同步过）| syncing | ok | error
+// state: idle (not synced yet) | syncing | ok | error
 export const status = { state: 'idle', at: 0, error: '', unpaired: false, report: null };
 const listeners = new Set();
 let lastTry = 0;
@@ -28,15 +29,15 @@ function update(patch) {
   }
 }
 
-// quiet：自动同步时失败不抛出，只记在状态里
+// quiet: for auto-sync; a failure doesn't throw, it's only recorded in the status
 export async function syncNow({ quiet = false } = {}) {
   if (!(await getLink())?.token) return null;
   lastTry = Date.now();
   update({ state: 'syncing', error: '' });
   try {
     const result = await sync();
-    await store.refreshRecords(); // 正在看的页面跟着更新
-    if (result.topics.length) store.invalidateAll(); // 题库有新内容：下次进入时重新读取
+    await store.refreshRecords(); // the page being viewed updates too
+    if (result.topics.length) store.invalidateAll(); // the question bank has new content: re-read it on the next visit
     reloadOpenNotes();
     update({ state: 'ok', at: Date.now(), report: result.report, unpaired: false });
     return result;
@@ -65,7 +66,7 @@ export function startAutoSync() {
   setTimeout(() => kick(0), 800);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') kick(60_000);
-    else hasChanges().then((yes) => yes && kick(0), () => {}); // 离开前把改动送出去
+    else hasChanges().then((yes) => yes && kick(0), () => {}); // send the changes out before leaving
   });
   setInterval(() => {
     if (document.visibilityState === 'visible') hasChanges().then((yes) => yes && kick(120_000), () => {});

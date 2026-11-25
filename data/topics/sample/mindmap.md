@@ -1,48 +1,48 @@
 - {tool-workflow}
   - {#task-contract}
-    - 任务契约：把目标转成输入、限制和可检查的完成条件
-    - 生成回答或发出调用 ≠ 完成任务，要看可检查的结果
-    - 契约要素
-      - 必要输入、输出约束
-      - 完成条件：必填齐全，未知信息明确标注
-      - 退出条件：缺输入就请求补充，到步数或时限就报告进度
-    - 缺信息先澄清或给带限制的部分结果，不靠反复调用掩盖
+    - Task contract: turns the goal into inputs, constraints and checkable completion criteria
+    - Answer or call produced ≠ task completed; judge by checkable results
+    - Contract elements
+      - Required inputs, output constraints
+      - Completion criteria: required fields complete, unknowns explicitly marked
+      - Exit conditions: missing input → ask for it; step or time limit → report progress
+    - Missing info: clarify or give a qualified partial result; don't mask it with repeated calls
   - {#tool-contract}
-    - 工具契约：做什么、收什么参数、返回什么
-    - 模型提出调用 → 应用校验后执行 → 结果交回模型
-    - 参数格式对 ≠ 外部操作成功，要读真实结果
-    - 两层校验
-      - Schema：类型、范围、必填（`required` 要单独声明）
-      - 业务规则：参数含义，如日期是否在指定的那一周
-    - 区分成功、无匹配和执行失败
+    - Tool contract: what it does, which parameters it takes, what it returns
+    - Model proposes call → app validates and executes → result back to model
+    - Well-formed parameters ≠ external operation succeeded; read the actual result
+    - Two layers of validation
+      - Schema: types, ranges, required fields (`required` must be declared separately)
+      - Business rules: parameter meaning, e.g. dates within the specified week
+    - Distinguish success, no match and execution failure
   - {#retry-idempotency}
-    - 幂等：同一逻辑操作重复执行，效果与执行一次相同
-    - 超时 ≠ 失败：服务端可能已完成，直接重试会重复写入
-    - 稳定的幂等键 + 服务端保存参数摘要和结果来去重
-      - 同键同参复用结果，同键不同参报冲突
-    - 重试按原因区分
-      - 临时故障：限次数和时限，加退避与随机抖动
-      - 参数错误：先改输入，重试没用
-      - 状态不明的写操作：先查结果再决定
+    - Idempotency: repeating one logical operation has the same effect as doing it once
+    - Timeout ≠ failure: server may be done; simply retrying duplicates the write
+    - Stable idempotency key + server stores parameter digest and result to deduplicate
+      - Same key, same parameters → reuse result; same key, different parameters → conflict
+    - Retry according to the cause
+      - Transient failure: limit attempts and time, add backoff and random jitter
+      - Parameter error: fix the input first; retrying won't help
+      - Write in unknown state: query the result first, then decide
 - {rag-evaluation}
   - {#chunk-evidence}
-    - RAG：先检索外部资料，再以它为依据生成
-    - 分块大小取舍：太小丢前提，太大混入无关、占上下文
-    - 按标题、段落、步骤等语义边界切，用真实问题检验
-    - 元数据（来源、章节、版本）→ 定位证据、生成引用、追踪更新
-    - 引用到文档 ≠ 每个结论都有支持，要核对具体段落
+    - RAG: retrieve external material first, then generate grounded in it
+    - Chunk size trade-off: too small loses premises; too large adds irrelevant text, eats context
+    - Split on semantic boundaries (headings, paragraphs, steps), test with real questions
+    - Metadata (source, section, version) → locate evidence, generate citations, track updates
+    - Citing a document ≠ every conclusion supported; check the specific passages
   - {#retrieval-quality}
-    - 召回：有没有找到必要证据；上下文选择：哪些交给模型
-    - Top-k 不是越多越好：补回证据，也带入重复、过期，增加时延成本
-    - 用标注的必要证据检查 → 去重、过滤旧版本，必要时重排序
-    - 排错顺序
-      - 候选里没有证据 → 查索引和查询
-      - 有证据却答错 → 查上下文组织和生成
-      - 只换生成模型修不好检索缺失
+    - Recall: was the required evidence found; context selection: what goes to the model
+    - Top-k: more isn't always better; recovers evidence but adds duplicates, stale text, latency, cost
+    - Check against labeled required evidence → deduplicate, filter old versions, rerank if needed
+    - Debugging order
+      - No evidence in candidates → check index and query
+      - Evidence present but answer wrong → check context organization and generation
+      - Just swapping the generation model won't fix missing retrieval
   - {#end-to-end-eval}
-    - 端到端：从提问到完成任务的整体结果
-    - 回归：用固定用例比较改动，防止原有能力退步
-    - 用例覆盖：正常问题、资料缺答案、文档更新后
-      - 缺证据时的预期：说明限制或请求补充
-    - 不只看流畅：任务完成、引用受证据支持、时延、成本
-    - 记录配置与资料版本；自动评分辅助，关键失败人工核验
+    - End-to-end: overall outcome from question to completed task
+    - Regression: compare changes on fixed test cases, guard against lost capabilities
+    - Test cases cover: normal questions, answer missing from material, after document updates
+      - Expected with missing evidence: state the limitation or ask for more
+    - Not just fluency: task completion, evidence-backed citations, latency, cost
+    - Record configuration and material version; auto-scoring assists, humans verify critical failures

@@ -1,27 +1,27 @@
-# 检索与效果评估
+# Retrieval and Evaluation
 
-## 分块与证据定位 {#chunk-evidence}
+## Chunking and Locating Evidence {#chunk-evidence}
 
-检索增强生成（Retrieval-Augmented Generation，RAG）先检索外部资料，再把相关内容作为生成答案的依据。分块（Chunking）决定检索单位：块太小容易丢失前提，块太大容易混入无关信息并占用上下文。应围绕标题、段落或步骤等语义边界切分，再用具体问题检验效果。
+Retrieval-augmented generation (RAG) first retrieves external material and then uses the relevant content as the basis for generating an answer. Chunking determines the unit of retrieval: chunks that are too small tend to lose their premises, while chunks that are too large tend to pull in irrelevant information and take up context. Split along semantic boundaries such as headings, paragraphs or steps, then test the result with concrete questions.
 
-每个块应保留来源、章节位置和版本等元数据（Metadata），让系统能定位证据、生成引用，并在资料更新时追踪旧内容。引用到某份文档，不等于文档已经支持答案中的每个结论，仍需核对具体段落。
+Each chunk should keep metadata such as its source, section location and version, so that the system can locate evidence, generate citations and track outdated content when the material is updated. Citing a document does not mean the document supports every conclusion in the answer; the specific passages still need to be checked.
 
-> 面试回答：分块要兼顾语义完整与检索精度，元数据负责定位和更新。最终既要找到资料，也要能说明答案由哪段证据支持。
+> Interview answer: Chunking has to balance semantic completeness against retrieval precision, and metadata takes care of location and updates. In the end, the system must not only find the material but also be able to show which piece of evidence supports the answer.
 
-基础概念参考：[RAG 原始论文](https://arxiv.org/abs/2005.11401)。
+For the basic concept, see the [original RAG paper](https://arxiv.org/abs/2005.11401).
 
-## 召回与上下文选择 {#retrieval-quality}
+## Recall and Context Selection {#retrieval-quality}
 
-召回（Recall）关注是否找到了回答问题所需的证据，上下文选择（Context Selection）关注哪些候选内容值得交给模型。检索器选出的前若干条候选（Top-k）并非越多越好：增加候选可能补回证据，也会带入重复、无关或过期资料，提高生成时延与成本。
+Recall is about whether the evidence needed to answer the question was found; context selection is about which candidates are worth passing to the model. Taking more of the retriever's top candidates (top-k) is not always better: adding candidates may bring back missing evidence, but it also brings in duplicate, irrelevant or outdated material and raises generation latency and cost.
 
-可以用已标注的必要证据检查检索结果，再去重、过滤不适用版本，必要时重新排序（Reranking）。排错应先看候选里是否有关键证据：没找到就检查索引和查询；找到了却答错，则检查上下文组织与生成环节。仅换一个生成模型，不能保证修复检索缺失。
+Retrieval results can be checked against labeled required evidence, then deduplicated and filtered for versions that do not apply, with reranking where necessary. Debugging should start by checking whether the candidates contain the key evidence: if it was not found, check the index and the query; if it was found but the answer is still wrong, check how the context is organized and the generation step. Simply switching to a different generation model is no guarantee of fixing missing retrieval.
 
-> 面试回答：我先检查必要证据是否被召回，再检查模型拿到的上下文和最终回答；候选数量要通过实际评估确定。
+> Interview answer: I first check whether the required evidence was recalled, then the context the model received and the final answer; the number of candidates should be set through actual evaluation.
 
-## 端到端回归评估 {#end-to-end-eval}
+## End-to-End Regression Evaluation {#end-to-end-eval}
 
-端到端评估（End-to-End Evaluation）检验用户从提出问题到完成任务的整体结果。回归评估（Regression Evaluation）用相对固定的用例，检查修改是否改善目标行为、是否让原有能力退步。用例至少包含正常问题、资料缺少答案和文档更新后的问题；缺证据时，预期行为应是说明限制或请求补充信息。
+End-to-end evaluation tests the overall outcome, from the user asking a question to the task being completed. Regression evaluation uses a relatively fixed set of test cases to check whether a change improves the target behavior and whether it makes existing capabilities regress. The test cases should include at least normal questions, questions whose answer is missing from the material, and questions asked after a document update; when evidence is missing, the expected behavior is to state the limitation or ask for more information.
 
-评估不能只看回答是否流畅，应同时检查任务完成、事实与引用是否受证据支持，以及时延和成本。更换分块策略、检索配置或提示词时，保留被测配置与资料版本，用同一套用例比较结果。自动评分可以辅助筛查，但关键失败仍需人工核验。
+Evaluation cannot look only at whether answers are fluent; it should also check task completion, whether facts and citations are supported by evidence, and latency and cost. When changing the chunking strategy, the retrieval configuration or the prompt, record the configuration under test and the material version, and compare the results on the same set of test cases. Automatic scoring can help with screening, but critical failures still need human verification.
 
-> 面试回答：用固定场景比较完整流程，覆盖正常、缺证据和更新情况，并结合质量、时延、成本判断改动是否值得上线。
+> Interview answer: Compare the complete pipeline on fixed scenarios that cover normal cases, missing evidence and updates, and weigh quality, latency and cost together to decide whether a change is worth shipping.

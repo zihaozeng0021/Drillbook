@@ -1,19 +1,19 @@
-// 页面笔记：每个页面一个 Markdown 文件 data/notes/<专题>/<页面>.md
+// Page notes: one Markdown file per page, data/notes/<topic>/<page>.md
 //
-// · 右侧面板里编辑，停止输入 0.8 秒后自动保存，Ctrl+S 立即保存
-// · 文件也可以直接用编辑器改：网页里没有未保存内容时，回到页面会自动载入新内容；
-//   两边同时改了会提示冲突，由你选择保留哪一份（服务端用内容指纹判断）
-// · 服务端覆盖前会把旧版本留在 data/notes/<专题>/_history/<页面>/
+// · Edited in the right-hand panel; autosaves 0.8 s after you stop typing, Ctrl+S saves at once
+// · The file can also be edited directly in an editor: if the web page has no unsaved changes, coming back to the page loads the new content;
+//   if both sides changed it you get a conflict and choose which version to keep (the server compares content hashes)
+// · Before overwriting, the server keeps the old version in data/notes/<topic>/_history/<page>/
 
 import { h, icon, prefs } from '../ui.js';
 import { mdFresh } from '../md.js';
 import { api } from '../api.js';
 
 const SAVE_DELAY = 800;
-const KEEPALIVE_LIMIT = 60000; // 关页面时用 keepalive 请求补存，浏览器对请求体有约 64KB 限制
-const docs = new Map(); // 「专题/页面」-> NoteDoc，切换页面、标签后状态还在
+const KEEPALIVE_LIMIT = 60000; // on page close, pending edits go out in a keepalive request; browsers cap its body at about 64 KB
+const docs = new Map(); // "topic/page" -> NoteDoc; state survives switching pages and tabs
 
-// 笔记在别处变了（手机 App 同步完）：已载入、没有未保存修改的笔记重新读取
+// Notes changed elsewhere (after a phone app sync): reload notes that are loaded and have no unsaved edits
 export function reloadOpenNotes() {
   for (const doc of docs.values()) if (doc.loaded && !doc.busy) doc.load();
 }
@@ -32,14 +32,14 @@ class NoteDoc {
     this.page = page;
     this.path = `data/notes/${tid}/${page.id}.md`;
     this.content = '';
-    this.base = null; // 上次与文件同步时的内容指纹
+    this.base = null; // content hash at the last sync with the file
     this.loaded = false;
     this.loading = null;
     this.dirty = false;
     this.saving = false;
     this.status = 'idle'; // idle | dirty | saving | saved | error | conflict
     this.error = '';
-    this.conflict = null; // { content, hash }：文件里的版本
+    this.conflict = null; // { content, hash }: the version in the file
     this.timer = 0;
     this.ui = { scroll: 0, selStart: 0, selEnd: 0, previewScroll: 0 };
     this.listeners = new Set();
@@ -58,7 +58,7 @@ class NoteDoc {
     return this.dirty || this.saving || this.status === 'conflict';
   }
 
-  // 从文件读取；本地有未保存的修改时不覆盖
+  // Read from the file; never overwrite unsaved local edits
   load() {
     if (this.busy) return Promise.resolve();
     if (this.loading) return this.loading;
@@ -79,9 +79,9 @@ class NoteDoc {
         this.emit(changed ? 'load' : 'status');
       })
       .catch((e) => {
-        if (this.loaded) return; // 已有内容时，后台核对失败不打扰
+        if (this.loaded) return; // content is already loaded: a failed background check stays silent
         this.status = 'error';
-        this.error = e.offline ? '连接不到本地服务，暂时无法读取笔记' : `读取失败：${e.message}`;
+        this.error = e.offline ? "Can't reach the local server, so the notes can't be loaded right now" : `Load failed: ${e.message}`;
         this.emit('status');
       })
       .finally(() => {
@@ -124,7 +124,7 @@ class NoteDoc {
         this.conflict = { content: e.data.content || '', hash: e.data.hash || '' };
       } else {
         this.status = 'error';
-        this.error = e.offline ? '连接不到本地服务，内容还在页面里，恢复后会继续保存' : `保存失败：${e.message}`;
+        this.error = e.offline ? "Can't reach the local server. Your notes are still on this page and will be saved once it's back" : `Save failed: ${e.message}`;
       }
     } finally {
       this.saving = false;
@@ -133,7 +133,7 @@ class NoteDoc {
     }
   }
 
-  // 冲突时：放弃网页里的修改，换成文件里的版本
+  // On a conflict: drop the edits in the web page and switch to the version in the file
   useFile() {
     if (!this.conflict) return;
     this.content = this.conflict.content;
@@ -145,7 +145,7 @@ class NoteDoc {
     this.emit('load');
   }
 
-  // 冲突时：用网页里的内容覆盖文件
+  // On a conflict: overwrite the file with the content in the web page
   keepMine() {
     if (!this.conflict) return;
     this.base = this.conflict.hash;
@@ -156,7 +156,7 @@ class NoteDoc {
   }
 }
 
-// 关闭或刷新页面时补存；补存不了（内容过大、有冲突、正在保存）就让浏览器确认
+// Save pending edits when the page is closed or reloaded; when that isn't possible (too large, conflict, save in progress), let the browser ask first
 window.addEventListener('beforeunload', (e) => {
   let block = false;
   for (const doc of docs.values()) {
@@ -170,7 +170,7 @@ window.addEventListener('beforeunload', (e) => {
   }
 });
 
-// ── 编辑器小功能：列表续写、Tab 缩进（都可以 Ctrl+Z 撤销） ──
+// ── Editor helpers: list continuation, Tab indent (both undoable with Ctrl+Z) ──
 
 const LIST_RE = /^(\s*)(?:([-*+])|(\d+)([.)]))(\s+)(\[[ xX]\]\s+)?/;
 const QUOTE_RE = /^(\s*(?:>\s?)+)/;
@@ -205,7 +205,7 @@ export function continueList(ta) {
 
   let m = LIST_RE.exec(before);
   if (m) {
-    if (!before.slice(m[0].length).trim() && !after.trim()) insertText(ta, '', ls, s); // 空列表项：结束列表
+    if (!before.slice(m[0].length).trim() && !after.trim()) insertText(ta, '', ls, s); // empty list item: end the list
     else insertText(ta, `\n${m[1]}${m[2] || `${Number(m[3]) + 1}${m[4]}`}${m[5]}${m[6] ? '[ ] ' : ''}`);
     return true;
   }
@@ -224,7 +224,7 @@ export function indent(ta, outdent) {
   if (s === t && !outdent) {
     const end = value.indexOf('\n', s);
     if (!LIST_RE.test(value.slice(ls, end < 0 ? value.length : end))) return insertText(ta, '  ');
-    insertText(ta, '  ', ls, ls); // 光标在列表项上：整项缩进一级（变成子列表）
+    insertText(ta, '  ', ls, ls); // cursor on a list item: indent the whole item one level (making it a sub-list)
     ta.setSelectionRange(s + 2, s + 2);
     return;
   }
@@ -241,7 +241,7 @@ export function indent(ta, outdent) {
   else ta.setSelectionRange(ls, ls + next.length);
 }
 
-// ── 面板 ──
+// ── Panel ──
 
 export class NotesPanel {
   constructor(host, topic) {
@@ -258,30 +258,30 @@ export class NotesPanel {
     this.ta = h('textarea', {
       class: 'notes-input',
       spellcheck: 'false',
-      placeholder: '用 Markdown 记笔记，停止输入后自动保存',
-      'aria-label': '笔记内容',
+      placeholder: 'Take notes in Markdown; they save automatically when you stop typing',
+      'aria-label': 'Notes text',
     });
     this.ta.addEventListener('input', () => this.doc?.set(this.ta.value));
     this.ta.addEventListener('keydown', (e) => this.editorKey(e));
-    this.preview = h('div', { class: 'md notes-preview', tabindex: '0', 'aria-label': '笔记预览' });
+    this.preview = h('div', { class: 'md notes-preview', tabindex: '0', 'aria-label': 'Notes preview' });
     this.banner = h('div', { class: 'notes-banner', role: 'alert', hidden: true });
     this.statusEl = h('span', { class: 'notes-status', role: 'status', 'aria-live': 'polite' });
-    this.btnEdit = h('button', { type: 'button', onclick: () => this.setMode('edit') }, '编辑');
-    this.btnPreview = h('button', { type: 'button', onclick: () => this.setMode('preview') }, '预览');
+    this.btnEdit = h('button', { type: 'button', onclick: () => this.setMode('edit') }, 'Edit');
+    this.btnPreview = h('button', { type: 'button', onclick: () => this.setMode('preview') }, 'Preview');
     this.noEl = h('span', { class: 'notes-no num' });
-    this.pathEl = h('span', { class: 'notes-path', 'data-tip': '笔记文件（相对项目根目录），可以直接用编辑器打开' });
+    this.pathEl = h('span', { class: 'notes-path', 'data-tip': 'Notes file (relative to the project root); you can open it directly in an editor' });
     this.countEl = h('span', { class: 'notes-count' });
 
     this.el = h(
       'aside',
-      { class: 'notes', 'aria-label': '页面笔记', tabindex: '-1', hidden: true },
+      { class: 'notes', 'aria-label': 'Page notes', tabindex: '-1', hidden: true },
       h(
         'header',
         { class: 'notes-head' },
-        h('h2', null, this.noEl, '笔记'),
+        h('h2', null, this.noEl, 'Notes'),
         this.statusEl,
-        h('div', { class: 'seg-ctl', role: 'group', 'aria-label': '显示方式' }, this.btnEdit, this.btnPreview),
-        h('button', { class: 'icon-btn', type: 'button', 'aria-label': '关闭笔记', 'data-tip': '关闭（Esc）', onclick: () => this.toggle(false) }, icon('x')),
+        h('div', { class: 'seg-ctl', role: 'group', 'aria-label': 'View mode' }, this.btnEdit, this.btnPreview),
+        h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close notes', 'data-tip': 'Close (Esc)', onclick: () => this.toggle(false) }, icon('x')),
       ),
       this.banner,
       h('div', { class: 'notes-body' }, this.ta, this.preview),
@@ -310,7 +310,7 @@ export class NotesPanel {
     for (const fn of [...this.listeners]) fn();
   }
 
-  // 路由切换时调用：page 为空表示当前不在页面里（总览、复习）
+  // Called on route changes: an empty page means we are not on a page (Overview, Review)
   setPage(page) {
     page = page || null;
     if (this.doc && this.doc.page.id !== page?.id) {
@@ -328,7 +328,7 @@ export class NotesPanel {
       this.pickMode();
       this.sync('load');
       this.restoreUi();
-      if (this.open) this.doc.load(); // 每次进入页面都和文件核对一次，拿到在编辑器里做的修改
+      if (this.open) this.doc.load(); // check against the file every time a page is entered, to pick up edits made in an editor
     }
     this.apply(false);
   }
@@ -363,7 +363,7 @@ export class NotesPanel {
   }
 
   pickMode() {
-    // 有内容时按上次选择的方式打开；空笔记直接进入编辑
+    // With content, open in the last chosen mode; empty notes go straight to editing
     const saved = prefs.get('notes.mode', 'edit') === 'preview' ? 'preview' : 'edit';
     this.mode = this.doc && this.doc.content.trim() ? saved : 'edit';
   }
@@ -411,7 +411,7 @@ export class NotesPanel {
         try {
           this.ta.setSelectionRange(Math.min(s, n), Math.min(t, n));
         } catch {
-          /* 隐藏状态下部分浏览器不允许设置选区 */
+          /* some browsers refuse to set a selection while hidden */
         }
         this.ta.scrollTop = scrollTop;
       }
@@ -420,11 +420,11 @@ export class NotesPanel {
     this.ta.readOnly = !doc.loaded;
 
     const STATUS = {
-      dirty: ['未保存', 'dirty'],
-      saving: ['保存中…', ''],
-      saved: ['已保存', ''],
-      error: [doc.loaded ? '保存失败' : '读取失败', 'bad'],
-      conflict: ['有冲突', 'bad'],
+      dirty: ['Unsaved', 'dirty'],
+      saving: ['Saving…', ''],
+      saved: ['Saved', ''],
+      error: [doc.loaded ? 'Save failed' : 'Load failed', 'bad'],
+      conflict: ['Conflict', 'bad'],
     };
     const [text, tone] = STATUS[doc.status] || ['', ''];
     this.statusEl.textContent = text;
@@ -433,16 +433,16 @@ export class NotesPanel {
     if (doc.status === 'conflict') {
       this.banner.className = 'notes-banner warn';
       this.banner.replaceChildren(
-        h('p', null, '笔记文件在别处被修改过，和这里的内容不一致。'),
-        h('button', { class: 'btn sm', type: 'button', onclick: () => this.resolve(() => doc.useFile()) }, '换成文件里的版本'),
-        h('button', { class: 'btn sm ghost', type: 'button', onclick: () => this.resolve(() => doc.keepMine()) }, '保留这里的内容'),
+        h('p', null, 'The notes file was changed elsewhere and no longer matches the content here.'),
+        h('button', { class: 'btn sm', type: 'button', onclick: () => this.resolve(() => doc.useFile()) }, 'Use the version in the file'),
+        h('button', { class: 'btn sm ghost', type: 'button', onclick: () => this.resolve(() => doc.keepMine()) }, 'Keep this version'),
       );
       this.banner.hidden = false;
     } else if (doc.status === 'error') {
       this.banner.className = 'notes-banner';
       this.banner.replaceChildren(
         h('p', null, doc.error),
-        h('button', { class: 'btn sm', type: 'button', onclick: () => (doc.loaded ? doc.save() : doc.load()) }, icon('retry'), '重试'),
+        h('button', { class: 'btn sm', type: 'button', onclick: () => (doc.loaded ? doc.save() : doc.load()) }, icon('retry'), 'Retry'),
       );
       this.banner.hidden = false;
     } else {
@@ -450,13 +450,13 @@ export class NotesPanel {
     }
 
     const chars = doc.content.replace(/\s/g, '').length;
-    this.countEl.textContent = chars ? `${chars.toLocaleString('zh-CN')} 字` : '';
+    this.countEl.textContent = chars ? `${chars.toLocaleString('en-US')} ${chars === 1 ? 'char' : 'chars'}` : '';
     this.pathEl.textContent = doc.path;
     this.renderMode();
     this.changed();
   }
 
-  // 处理完冲突后，焦点回到编辑区（按钮随横幅一起消失）
+  // After a conflict is resolved, focus goes back to the editor (the buttons disappear with the banner)
   resolve(action) {
     action();
     this.mode = 'edit';
@@ -484,7 +484,7 @@ export class NotesPanel {
       try {
         this.ta.setSelectionRange(Math.min(u.selStart, n), Math.min(u.selEnd, n));
       } catch {
-        /* 同上 */
+        /* same as above */
       }
       this.ta.scrollTop = u.scroll;
       this.preview.scrollTop = u.previewScroll;
@@ -492,10 +492,10 @@ export class NotesPanel {
   }
 
   editorKey(e) {
-    if (e.isComposing || e.keyCode === 229) return; // 输入法正在组字
+    if (e.isComposing || e.keyCode === 229) return; // an IME is composing
     if (e.key === 'Escape') {
       e.preventDefault();
-      this.el.focus({ preventScroll: true }); // 第一次 Esc 离开输入框，再按一次关闭面板
+      this.el.focus({ preventScroll: true }); // the first Esc leaves the text box, a second one closes the panel
       return;
     }
     if (this.ta.readOnly || e.ctrlKey || e.metaKey || e.altKey) return;

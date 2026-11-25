@@ -1,10 +1,10 @@
-// 入口与路由
-//   #/                          专题列表
-//   #/p/<专题>                  专题总览（p 是固定前缀，内容里的站内链接依赖它）
-//   #/p/<专题>/page/<页面>      知识点（?kp=<知识点> 定位到该知识点；?edit=1 编辑本页的 knowledge.md）
-//   #/p/<专题>/page/<页面>/quiz 本页练习
-//   #/p/<专题>/map              思维导图（?page=<页面>&kp=<知识点> 展开并定位到该节点）
-//   #/p/<专题>/review           错题复习
+// Entry point and routing
+//   #/                            topic list
+//   #/p/<topic>                   topic overview (p is a fixed prefix; in-site links in the content depend on it)
+//   #/p/<topic>/page/<page>       knowledge points (?kp=<point> scrolls to that knowledge point; ?edit=1 edits this page's knowledge.md)
+//   #/p/<topic>/page/<page>/quiz  Practice for this page
+//   #/p/<topic>/map               mind map (?page=<page>&kp=<point> expands and scrolls to that node)
+//   #/p/<topic>/review            Review
 
 import { h, icon, initTooltip, hideTip } from './ui.js';
 import * as store from './store.js';
@@ -57,7 +57,7 @@ async function route() {
     const topic = await store.getTopic(tid);
     if (token !== routeToken) return;
     if (shell && shell.topic !== topic) {
-      // 题库被重新载入（例如改了 knowledge.md）：外框持有的旧对象作废，重建
+      // The question bank was reloaded (e.g. knowledge.md was edited): the old object the shell holds is stale, so rebuild it
       shell.destroy();
       shell = null;
     }
@@ -100,31 +100,31 @@ function errorScreen(err) {
       'div',
       { class: 'fullscreen-msg' },
       icon('warn', 'lg'),
-      h('h1', null, '连接不到本地服务'),
-      h('p', null, '双击项目文件夹里的 start.bat 启动服务，再刷新本页。'),
-      h('button', { class: 'btn primary', onclick: () => route() }, icon('retry'), '重新连接'),
+      h('h1', null, "Can't reach the local server"),
+      h('p', null, 'Double-click start.bat in the project folder to start the server, then reload this page.'),
+      h('button', { class: 'btn primary', onclick: () => route() }, icon('retry'), 'Reconnect'),
     );
   }
   if (err.status === 404) {
     return h(
       'div',
       { class: 'fullscreen-msg' },
-      h('h1', null, '找不到这个专题'),
-      h('p', null, '它可能被重命名或删除了。'),
-      h('a', { class: 'btn primary', href: '#/' }, '返回专题列表'),
+      h('h1', null, 'Topic not found'),
+      h('p', null, 'It may have been renamed or deleted.'),
+      h('a', { class: 'btn primary', href: '#/' }, 'Back to topic list'),
     );
   }
   return h(
     'div',
     { class: 'fullscreen-msg' },
     icon('warn', 'lg'),
-    h('h1', null, '加载失败'),
+    h('h1', null, 'Failed to load'),
     h('p', null, err.message || String(err)),
-    h('button', { class: 'btn primary', onclick: () => route() }, icon('retry'), '重试'),
+    h('button', { class: 'btn primary', onclick: () => route() }, icon('retry'), 'Retry'),
   );
 }
 
 initTooltip();
 window.addEventListener('hashchange', route);
 route();
-startAutoSync(); // 只在安卓 App 里生效
+startAutoSync(); // only takes effect in the Android app

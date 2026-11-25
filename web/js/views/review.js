@@ -1,4 +1,4 @@
-// 错题复习：全部题目按优先级排序，可筛选后成批练习，也可单独练某一题
+// Review: every question sorted by priority; filter and practice in batches, or practice a single question
 
 import { h, icon, plainText, relTime, historyMarks, prefs } from '../ui.js';
 import { md } from '../md.js';
@@ -8,14 +8,15 @@ import { getSession, newSession, dropSession, mountQuiz } from './quiz.js';
 
 const enc = encodeURIComponent;
 const SIZES = [10, 20, 50, 'all'];
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
 const FORMULA = `$$P=\\frac{E+${RANK.K * RANK.P0}}{E+C+${RANK.K}}\\qquad w=0.5^{\\,\\Delta t/${RANK.HALF_LIFE_DAYS}}\\times ${RANK.ORDER_DECAY}^{\\,k}$$
 
-- 每次作答的权重 $w$：$\\Delta t$ 是距今天数，$k$ 是这次之后又作答了几次。$E$、$C$ 分别是答错、答对的权重之和
-- 列表按 $P$ 从高到低排列，显示为 0–100 的优先级
-- 未做的题固定为 ${RANK.P0 * 100}，排在中间；高于 ${RANK.P0 * 100} 是薄弱（近期加权错误率超过 ${RANK.P0 * 100}%），排在未做之前
-- 当天答错后马上答对，仍然算薄弱；隔一天以上再答对，才会降到 ${RANK.P0 * 100} 以下
-- 一直答对的题排在最后；长期不练，所有题都会慢慢回到 ${RANK.P0 * 100}`;
+- Each answer has weight $w$: $\\Delta t$ is how many days ago it was given, $k$ is how many answers to the question came after it. $E$ and $C$ are the total weights of wrong and correct answers
+- The list is sorted by $P$ from high to low, shown as a priority from 0–100
+- New questions are fixed at ${RANK.P0 * 100}, in the middle; above ${RANK.P0 * 100} is Weak (recent weighted error rate over ${RANK.P0 * 100}%), ranked ahead of New
+- A correct answer right after a wrong one on the same day still leaves the question Weak; only a correct answer a day or more later brings it below ${RANK.P0 * 100}
+- Questions you always get right come last; without practice, every question slowly drifts back to ${RANK.P0 * 100}`;
 
 export function renderReview(main, topic, params) {
   const key = `${topic.id}:review`;
@@ -46,12 +47,12 @@ export function renderReview(main, topic, params) {
       h(
         'header',
         { class: 'rv-session-head' },
-        h('h1', null, s.single ? '单题练习' : '错题复习'),
-        h('button', { class: 'btn ghost sm', type: 'button', onclick: endSession }, icon('x'), s.single ? '返回列表' : '结束本轮'),
+        h('h1', null, s.single ? 'Single question' : 'Review'),
+        h('button', { class: 'btn ghost sm', type: 'button', onclick: endSession }, icon('x'), s.single ? 'Back to list' : 'End round'),
       ),
       holder,
     );
-    quiz = mountQuiz(holder, topic, s, { exit: { label: '返回列表', onClick: endSession }, onSingleDone: endSession });
+    quiz = mountQuiz(holder, topic, s, { exit: { label: 'Back to list', onClick: endSession }, onSingleDone: endSession });
     window.scrollTo(0, 0);
   }
 
@@ -74,15 +75,15 @@ export function renderReview(main, topic, params) {
     const head = h(
       'header',
       { class: 'rv-head' },
-      h('h1', null, '错题复习'),
+      h('h1', null, 'Review'),
       h(
         'button',
         {
           class: 'icon-btn',
           type: 'button',
           'aria-expanded': String(infoOpen),
-          'aria-label': '排序规则',
-          'data-tip': '排序规则',
+          'aria-label': 'How questions are ranked',
+          'data-tip': 'How questions are ranked',
           onclick: () => {
             infoOpen = !infoOpen;
             showList();
@@ -94,26 +95,26 @@ export function renderReview(main, topic, params) {
 
     const info = infoOpen ? h('div', { class: 'panel formula' }, h('div', { class: 'md', html: md(FORMULA) })) : null;
 
-    // 优先级频谱：每根柱子是一道题，从左到右优先级递减
+    // Priority spectrum: each bar is one question, priority falling from left to right
     const H = 64;
     const spectrum = h(
       'div',
-      { class: 'spectrum', role: 'img', 'aria-label': '题目按优先级从高到低排列' },
+      { class: 'spectrum', role: 'img', 'aria-label': 'Questions by priority, high to low' },
       h('div', { class: 'ref', style: { bottom: `${6 + RANK.P0 * H}px` } }, h('span', { class: 'num' }, RANK.P0 * 100)),
       scoped.map((q, i) => {
         const st = s.get(q.gid);
         return h('span', {
           class: `bar s-${st.state}${visibleSet.has(q.gid) ? '' : ' dim'}`,
           style: { height: `${6 + st.P * H}px` },
-          'data-tip': `#${i + 1}　${STATE_LABEL[st.state]}　优先级 ${st.score}\n${plainText(q.stem, 60)}`,
+          'data-tip': `#${i + 1} · ${STATE_LABEL[st.state]} · Priority ${st.score}\n${plainText(q.stem, 60)}`,
         });
       }),
     );
 
     const chips = h(
       'div',
-      { class: 'chips', role: 'group', 'aria-label': '按状态筛选' },
-      [['all', '全部'], ...STATES.map((st) => [st, STATE_LABEL[st]])].map(([k, label]) =>
+      { class: 'chips', role: 'group', 'aria-label': 'Filter by state' },
+      [['all', 'All'], ...STATES.map((st) => [st, STATE_LABEL[st]])].map(([k, label]) =>
         h(
           'button',
           {
@@ -137,19 +138,19 @@ export function renderReview(main, topic, params) {
       'select',
       {
         class: 'sel',
-        'aria-label': '按页面筛选',
+        'aria-label': 'Filter by page',
         onchange: (e) => {
           pageFilter = e.target.value;
           showList();
         },
       },
-      h('option', { value: 'all' }, '全部页面'),
+      h('option', { value: 'all' }, 'All pages'),
       topic.pages.map((p) => h('option', { value: p.id, selected: pageFilter === p.id }, `${p.no}  ${p.title}`)),
     );
 
     const sizeCtl = h(
       'div',
-      { class: 'seg-ctl', role: 'group', 'aria-label': '每轮题量' },
+      { class: 'seg-ctl', role: 'group', 'aria-label': 'Questions per round' },
       SIZES.map((v) =>
         h(
           'button',
@@ -163,7 +164,7 @@ export function renderReview(main, topic, params) {
               showList();
             },
           },
-          v === 'all' ? '全部' : h('span', { class: 'num' }, v),
+          v === 'all' ? 'All' : h('span', { class: 'num' }, v),
         ),
       ),
     );
@@ -176,14 +177,14 @@ export function renderReview(main, topic, params) {
         'div',
         { class: 'rv-run' },
         pageSelect,
-        h('span', { class: 'rv-size' }, h('span', { class: 'rv-label' }, '每轮'), sizeCtl),
+        h('span', { class: 'rv-size' }, h('span', { class: 'rv-label' }, 'Per round'), sizeCtl),
         h(
           'button',
           { class: 'btn primary', type: 'button', disabled: !n, onclick: () => startSession(visible.slice(0, n)) },
           icon('play'),
-          '开始复习',
+          'Review',
           h('span', { class: 'num' }, n),
-          '题',
+          n === 1 ? 'question' : 'questions',
         ),
       ),
     );
@@ -193,7 +194,7 @@ export function renderReview(main, topic, params) {
       const page = topic.pageById.get(q.pageId);
       return h(
         'button',
-        { class: 'rrow', type: 'button', onclick: () => startSession([q], true), 'aria-label': `单独练习：${plainText(q.stem, 40)}` },
+        { class: 'rrow', type: 'button', onclick: () => startSession([q], true), 'aria-label': `Practice this question: ${plainText(q.stem, 40)}` },
         h('span', { class: 'rank num' }, i + 1),
         meter(st),
         h('span', { class: 'stem' }, plainText(q.stem, 140)),
@@ -211,15 +212,15 @@ export function renderReview(main, topic, params) {
             'div',
             { class: 'rrow rhead', 'aria-hidden': 'true' },
             h('span', null, '#'),
-            h('span', null, '优先级'),
-            h('span', null, '题目'),
-            h('span', null, '页面'),
-            h('span', null, '最近作答'),
-            h('span', { class: 'when' }, '上次'),
+            h('span', null, 'Priority'),
+            h('span', null, 'Question'),
+            h('span', null, 'Page'),
+            h('span', null, 'History'),
+            h('span', { class: 'when' }, 'Last'),
           ),
           rows,
         )
-      : h('p', { class: 'muted rv-empty' }, scoped.length ? '这个筛选条件下没有题目。' : '还没有题目。');
+      : h('p', { class: 'muted rv-empty' }, scoped.length ? 'No questions match this filter.' : 'No questions yet.');
 
     return h('div', { class: 'rv-list' }, head, info, h('section', { class: 'panel rv-panel' }, spectrum, controls), list);
   }
@@ -243,8 +244,8 @@ export function renderReview(main, topic, params) {
 
 function meter(st) {
   const tip = st.n
-    ? `${STATE_LABEL[st.state]}　优先级 ${st.score}\n加权答错 E = ${st.E.toFixed(2)}，加权答对 C = ${st.C.toFixed(2)}\n共作答 ${st.n} 次，答对 ${st.correct} 次`
-    : `未做　优先级 ${st.score}`;
+    ? `${STATE_LABEL[st.state]} · Priority ${st.score}\nWeighted wrong E = ${st.E.toFixed(2)}, weighted correct C = ${st.C.toFixed(2)}\nAnswered ${plural(st.n, 'time')}, ${st.correct} correct`
+    : `New · Priority ${st.score}`;
   return h(
     'span',
     { class: 'meter', 'data-tip': tip },

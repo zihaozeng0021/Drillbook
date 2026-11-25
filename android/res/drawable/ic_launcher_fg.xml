@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 自适应图标的前景：与网站图标相同的 3×3 方格，放在 108dp 画布中间的安全区里 -->
+<!-- Adaptive icon foreground: the same 3×3 grid as the site icon, inside the safe zone in the middle of the 108dp canvas -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
