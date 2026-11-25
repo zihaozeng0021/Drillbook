@@ -110,6 +110,7 @@ export function renderReview(main, topic, params) {
         });
       }),
     );
+    spectrum.style.setProperty('--n', scoped.length); // the CSS narrows the gaps between bars when there are many
 
     const chips = h(
       'div',
@@ -198,7 +199,7 @@ export function renderReview(main, topic, params) {
         h('span', { class: 'rank num' }, i + 1),
         meter(st),
         h('span', { class: 'stem' }, plainText(q.stem, 140)),
-        h('span', { class: 'pg' }, h('span', { class: 'num' }, page.no), page.title),
+        h('span', { class: 'pg' }, h('span', { class: 'num' }, page.no), h('span', { class: 't' }, page.title)),
         st.n ? historyMarks(store.attemptsOf(topic, q.gid), 8) : h('span', { class: 'hist-empty' }, '—'),
         h('span', { class: 'when' }, st.last ? relTime(st.last.t) : ''),
       );
