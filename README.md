@@ -54,7 +54,7 @@ The phone and the computer must be on the same Wi-Fi. School and café networks 
 
 ### Add a topic with an AI agent
 
-`AGENTS.md` guides a coding agent through turning a source into knowledge points, questions and a mind map: planning, overlap analysis, file formats, question quality and validation. Ask your coding agent to read it first, then provide the source.
+`AGENTS.md` is the entry point for coding agents: it holds the hard rules and sends the agent to the guide for its task in `docs/agents/` (turning a source into a topic, overlap analysis, file formats, content standards, mind maps, editing and fixing reported questions, changing the site). Ask your coding agent to read it first, then provide the source.
 
 1. Open this folder in your agent and start a new session.
 2. Send the source, for example:
@@ -81,7 +81,7 @@ The phone and the computer must be on the same Wi-Fi. School and café networks 
 
 | Folder | Contents |
 | --- | --- |
-| `data/topics/` | Topics, pages, knowledge points and questions (format described in `AGENTS.md`) |
+| `data/topics/` | Topics, pages, knowledge points and questions (format described in `docs/agents/file-formats.md`) |
 | `data/records/` | Your answers, one line per answer; `resets.json` notes when each topic's answers were last reset |
 | `data/notes/` | Your notes, one `.md` file per page; older versions in `_history/` |
 | `data/feedback/` | Your question reports: one line per report, edit, withdrawal or fix |
