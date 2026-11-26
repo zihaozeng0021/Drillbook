@@ -28,6 +28,7 @@ While practicing, the user can flag a badly generated question with the **Report
 
 - [ ] `--check` shows no errors and no coverage or mind map warnings
 - [ ] No existing topic, page, knowledge point or question id changed; new question ids continue the page's numbering
+- [ ] Every question you wrote or changed is self-contained (no "according to the slides", no theorem or example numbers)
 - [ ] `mindmap.md` updated if knowledge points or pages were added, deleted or moved
 - [ ] Every report you handled is closed with `--resolve` and a note
 - [ ] Nothing changed in `data/records/`, `data/notes/` or `data/feedback/` (other than through `--resolve`), or in code files

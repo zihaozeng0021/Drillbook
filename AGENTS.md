@@ -13,7 +13,7 @@ Whatever the task:
 1. Don't modify `data/records/`, `data/notes/`, `data/feedback/` (except closing question reports with `python server.py --resolve`), `server.py`, `web/`, `android/` or `start.bat`, and don't touch `.local/`; change code only when the user explicitly asks you to change the site.
 2. Never change an existing topic id, page id, knowledge point id or question id: answer records and notes are linked through them.
 3. If the user hasn't said where content should go and the site has a similar or overlapping topic, ask first, and write files only after the user decides.
-4. Every question tests understanding and application; no recall questions about years, who proposed something, paper titles, version numbers or item numbers.
+4. Every question tests understanding and application, and is self-contained: answerable from what was learned plus the question itself. Never "according to the slides" or anything else that needs the source document; no recall questions about years, who proposed something, paper titles, version numbers or item numbers.
 5. Write one page at a time: after each page, self-review and run `--check`, and fix everything before starting the next page.
 
 ## Sample topic

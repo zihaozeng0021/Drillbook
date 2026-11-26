@@ -85,6 +85,7 @@ Tell the user in a few lines:
 - [ ] No letter references such as "pick B" or "option A" in explanations
 - [ ] Content not in English: every knowledge point annotates its core terms with the English term in parentheses
 - [ ] No recall questions about years, proposers, paper titles, version numbers or item numbers; every question maps to understanding or applying a knowledge point
+- [ ] Every question is self-contained: no "according to the slides", no lecture, theorem or example numbers; a learner who never saw the source can answer it
 - [ ] Book / course topics: pages and knowledge points follow the book's chapters or the lectures, and knowledge point titles carry section or lecture numbers; `source.md` has only the contents and scope, no copied text
 - [ ] LaTeX backslashes are escaped in JSON
 - [ ] No duplicate knowledge points or questions within the topic
