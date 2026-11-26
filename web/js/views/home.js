@@ -194,7 +194,14 @@ function phoneBar(link) {
     sub.textContent = s.state === 'error' ? `${s.error}${s.at ? ` (last synced ${relTime(s.at)})` : ''}` : where;
     btn.disabled = s.state === 'syncing';
     const c = await localChanges();
-    const what = [c.records ? plural(c.records, 'answer') : '', c.notes ? plural(c.notes, 'note') : '', c.order ? 'topic order' : ''].filter(Boolean).join(', ');
+    const what = [
+      c.records ? plural(c.records, 'answer') : '',
+      c.notes ? plural(c.notes, 'note') : '',
+      c.feedback ? plural(c.feedback, 'question report') : '',
+      c.order ? 'topic order' : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
     pending.textContent = what ? `Not synced to the computer yet: ${what}` : '';
     notes.replaceChildren(...(await conflictLines(s.report)));
   }

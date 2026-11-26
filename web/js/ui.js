@@ -43,6 +43,7 @@ const ICONS = {
   map: '<circle cx="5.5" cy="12" r="2.5"/><path d="M8 12h3.5M11.5 12c0-4.3 1.5-6.5 4.5-6.5h4M11.5 12c0 4.3 1.5 6.5 4.5 6.5h4M11.5 12h8.5"/>',
   open: '<path d="M9.5 6.5h8v8"/><path d="M17.5 6.5L7 17"/>',
   search: '<circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L20 20"/>',
+  flag: '<path d="M6.5 20.5v-16"/><path d="M6.5 4.5h11l-2.5 4.25 2.5 4.25h-11"/>',
 };
 
 export function icon(name, cls = '') {
@@ -217,6 +218,67 @@ export function modal({ title, body, actions = [], wide = false }) {
     document.body.append(overlay);
     document.addEventListener('keydown', onKey, true);
     (buttons[buttons.length - 1] || overlay.querySelector('.dialog')).focus?.();
+  });
+}
+
+// A dialog with a text box. Resolves to { action, text }, or null when cancelled.
+// actions: [{ label, value, kind, needsText }]; value null cancels; buttons with needsText stay disabled while the box is empty.
+// Ctrl+Enter (⌘+Enter) presses the last button. Clicking outside doesn't close it, so a long message isn't lost by accident.
+export function textDialog({ title, intro, extra, value = '', placeholder = '', actions }) {
+  return new Promise((resolve) => {
+    const prevFocus = document.activeElement;
+    const box = h('textarea', { class: 'dialog-text', rows: '6', maxlength: '4000', placeholder, 'aria-label': title });
+    box.value = value;
+    const close = (result) => {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey, true);
+      prevFocus?.focus?.();
+      resolve(result);
+    };
+    const buttons = actions.map((a) =>
+      h(
+        'button',
+        {
+          class: `btn ${a.kind || 'ghost'}`,
+          type: 'button',
+          'data-needs-text': a.needsText ? '1' : null,
+          onclick: () => close(a.value === null ? null : { action: a.value, text: box.value.trim() }),
+        },
+        a.label,
+      ),
+    );
+    const refresh = () => {
+      for (const b of buttons) if (b.dataset.needsText) b.disabled = !box.value.trim();
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        close(null);
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) {
+        const last = buttons[buttons.length - 1];
+        e.preventDefault();
+        if (last && !last.disabled) last.click();
+      }
+    };
+    box.addEventListener('input', refresh);
+    const overlay = h(
+      'div',
+      { class: 'overlay' },
+      h(
+        'div',
+        { class: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+        h('h3', null, title),
+        intro ? h('p', null, intro) : null,
+        extra || null,
+        box,
+        h('div', { class: 'dialog-actions' }, buttons),
+      ),
+    );
+    document.body.append(overlay);
+    document.addEventListener('keydown', onKey, true);
+    refresh();
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
   });
 }
 

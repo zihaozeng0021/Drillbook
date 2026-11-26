@@ -12,7 +12,7 @@ A **topic** is a learning path generated from one or more **sources**. A source 
 
 Whatever the task:
 
-1. Don't modify `data/records/`, `data/notes/`, `server.py`, `web/`, `android/` or `start.bat`, and don't touch `.local/`; change code only when the user explicitly asks you to change the site.
+1. Don't modify `data/records/`, `data/notes/`, `data/feedback/` (except closing question reports with `python server.py --resolve`), `server.py`, `web/`, `android/` or `start.bat`, and don't touch `.local/`; change code only when the user explicitly asks you to change the site.
 2. Never change an existing topic id, page id, knowledge point id or question id: answer records and notes are linked through them.
 3. If the user hasn't said where content should go and the site has a similar or overlapping topic, ask first, and write files only after the user decides.
 4. Every question tests understanding and application; no recall questions about years, who proposed something, paper titles, version numbers or item numbers.
@@ -27,10 +27,11 @@ Whatever the task:
 | Item | Details |
 | --- | --- |
 | Where content goes | `data/topics/<topic-id>/` |
-| Don't modify when generating content | `data/records/` (answer records), `data/notes/` (user notes), `server.py`, `web/`, `android/`, `start.bat`, `.local/` (local config and keys) |
+| Don't modify when generating content | `data/records/` (answer records), `data/notes/` (user notes), `data/feedback/` (question reports), `server.py`, `web/`, `android/`, `start.bat`, `.local/` (local config and keys) |
 | Mind map | `data/topics/<topic-id>/mindmap.md`: generate it after all pages are written; update it when pages or knowledge points are added or removed |
 | Inventory existing content | `python server.py --outline`: every topic → page → knowledge point, how many questions each knowledge point has, and whether the topic has a mind map |
 | Validate | `python server.py --check`: format errors and coverage warnings; exits with code 1 if there is any `error` |
+| Question reports | `python server.py --feedback`: the questions the user reported while practicing; see "Fixing reported questions" in "V. Editing existing content" |
 | Taking effect | No restart needed; the user just refreshes the browser |
 
 Replace `python` with `python3` (macOS / Linux) or `py -3` (Windows) as appropriate.
@@ -452,6 +453,18 @@ The site draws it as the topic's mind map ("Mind map" in the side navigation): t
 - When you add, delete or move knowledge points or pages, update `mindmap.md`; renaming alone doesn't require it.
 - Don't delete content the user didn't ask you to delete.
 
+### Fixing reported questions
+
+While practicing, the user can flag a badly generated question with the **Report** button and say what's wrong with it. Reports are kept in `data/feedback/<topic-id>.jsonl`, an append-only log (reports made on the phone arrive with the next sync). When the user asks you to fix the reported questions:
+
+1. Run `python server.py --feedback` (or `--feedback <topic-id>` for one topic). For each open report it shows the question (`<page-id>/<question-id>`), the file to edit, the question as it reads now, and the user's note; "When reported it read" appears when the question has been edited since.
+2. For each report, read the question in `questions.json` and its knowledge points in `knowledge.md`, and judge the report. The note may be short or in another language: work out what the user means, and check the claim against the source (for book and course topics) instead of taking it on trust.
+3. If the report is right, fix the question by the rules above: wording, options, answer and explanation are edited in place and keep the id; if the question has to test something else, write it with a new id and delete the old one. If the error comes from the knowledge point itself, fix `knowledge.md` too, and `mindmap.md` if a bullet repeats it. Keep the topic's language and the standards in "IV. Content standards".
+4. If the question is fine as it is (the report is mistaken, or the question was already fixed), leave it unchanged.
+5. After each page, run `--check`.
+6. Close each report with `python server.py --resolve <topic-id> <page-id>/<question-id> "<what changed, or why nothing did>"`. The user sees this note when they open the question's report again, so write one clear sentence, in the language of their report. Close reports on questions that no longer exist the same way, saying so. Never edit or delete lines in `data/feedback/` by hand.
+7. Tell the user in a few lines what you changed for each report, and which ones you left unchanged and why.
+
 ## VI. Final checklist
 
 - [ ] Overlap analysis done: no candidate topics, or the user has chosen
@@ -465,7 +478,8 @@ The site draws it as the topic's mind map ("Mind map" in the side navigation): t
 - [ ] No duplicate knowledge points or questions within the topic
 - [ ] `mindmap.md` created or updated: each knowledge point appears once, with 3–5 short bullets; `--check` shows no mind map warnings
 - [ ] `topic.json` and `source.md` updated according to the overlap conclusion
-- [ ] Nothing changed in `data/records/`, `data/notes/` (except sample data) or code files
+- [ ] Fixing reported questions: every report you handled is closed with `--resolve` and a note
+- [ ] Nothing changed in `data/records/`, `data/notes/`, `data/feedback/` (except sample data and `--resolve`) or code files
 
 ## VII. Other tasks: changing the site itself
 
@@ -476,5 +490,5 @@ Change code only when the user explicitly asks you to change the site.
 - Interface style: dark navy background; color only encodes data state (Weak / Fair / Mastered / New); no decorative text. Interface text, messages, code comments and docs are in English.
 - The Android app (`android/`) is only a WebView shell; the site code is copied in from `web/` at build time. `android/build.py` drives the Android SDK using only the Python standard library, without Gradle. After changing `web/`, run `python android/build.py` to rebuild it.
 - Pages in the phone app read and write the phone's own data through `web/js/api.js` (implemented by `web/js/local.js`) and never call the computer directly; when you add or change an interface in `api.js`, implement the same interface in `local.js`.
-- Phone–computer sync: the phone side is in `web/js/phone.js` and `web/js/autosync.js`, the computer side in `apply_phone_sync` in `server.py`. Answer records are merged by "time + question". For notes, if only one side changed, that version is used; if both changed, the later edit wins and the other copy goes to `_history/`. The topic order (drag sorting) works the same way as notes. Each topic's reset time is in `data/records/resets.json`. When you change how answer records, notes or the topic order are stored, take care of all three places.
+- Phone–computer sync: the phone side is in `web/js/phone.js` and `web/js/autosync.js`, the computer side in `apply_phone_sync` in `server.py`. Answer records are merged by "time + question", and question reports by "time + question + kind" (both are append-only logs). For notes, if only one side changed, that version is used; if both changed, the later edit wins and the other copy goes to `_history/`. The topic order (drag sorting) works the same way as notes. Each topic's reset time is in `data/records/resets.json`. When you change how answer records, question reports, notes or the topic order are stored, take care of all three places; the phone keeps its data in IndexedDB (`web/js/local.js`), so a new store needs a higher `DB_VERSION` and an upgrade step that keeps existing data.
 - After changes, walk through the affected flows in a real browser and run `--check`.

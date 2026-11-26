@@ -4,6 +4,8 @@
 // · Question bank: the parsed result downloaded from the computer, replaced as a whole; knowledge.md can't be edited on the phone
 // · Answer records: time + question identify a record (they form the primary key), so writing the same one again adds nothing;
 //   records made on the phone carry a local flag, are uploaded to the computer when syncing, and lose the flag once the computer has them
+// · Question reports: an event log like answer records (time + question + kind identify an event); events made on the phone carry a
+//   local flag until the computer has them; a question's latest event decides whether it has an open report
 // · Notes: notes edited on the phone carry a dirty flag and are handed to the computer to merge when syncing;
 //   the old version is kept in noteHistory before being overwritten (same rules as _history/ on the computer)
 // · Reset answer records: old records move to archives and the reset time is recorded; on sync the topic is reset on the computer too
@@ -11,7 +13,7 @@
 //   and handed to the computer to merge when syncing (if only one side changed, that side wins; if both did, the later change wins)
 
 const DB_NAME = 'drillbook';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // 2: question reports (feedback)
 const HISTORY_KEEP = 30;
 const SNAPSHOT_GAP = 600_000;
 const enc = new TextEncoder();
@@ -22,14 +24,18 @@ function openDb() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
       const r = indexedDB.open(DB_NAME, DB_VERSION);
-      r.onupgradeneeded = () => {
+      // Runs on first install and when DB_VERSION goes up: create only what the older version didn't have, so existing data stays
+      r.onupgradeneeded = (e) => {
         const db = r.result;
-        db.createObjectStore('kv');
-        db.createObjectStore('topics');
-        db.createObjectStore('records', { keyPath: ['tid', 't', 'q'] }).createIndex('tid', 'tid');
-        db.createObjectStore('notes', { keyPath: ['tid', 'pageId'] });
-        db.createObjectStore('noteHistory', { autoIncrement: true }).createIndex('page', ['tid', 'pageId']);
-        db.createObjectStore('archives', { autoIncrement: true });
+        if (e.oldVersion < 1) {
+          db.createObjectStore('kv');
+          db.createObjectStore('topics');
+          db.createObjectStore('records', { keyPath: ['tid', 't', 'q'] }).createIndex('tid', 'tid');
+          db.createObjectStore('notes', { keyPath: ['tid', 'pageId'] });
+          db.createObjectStore('noteHistory', { autoIncrement: true }).createIndex('page', ['tid', 'pageId']);
+          db.createObjectStore('archives', { autoIncrement: true });
+        }
+        if (e.oldVersion < 2) db.createObjectStore('feedback', { keyPath: ['tid', 't', 'q', 'kind'] }).createIndex('tid', 'tid');
       };
       r.onsuccess = () => resolve(r.result);
       r.onerror = () => reject(r.error);
@@ -101,6 +107,21 @@ function reorderTopics(list, ids) {
 }
 
 const sameIds = (a, b) => a.length === b.length && a.every((id, i) => id === b[i]);
+
+// Same rules as clean_feedback in server.py: returns the cleaned event, or null if it isn't a valid one
+const FEEDBACK_KINDS = ['report', 'withdraw', 'resolve'];
+function cleanFeedback(r, now) {
+  if (!r || !FEEDBACK_KINDS.includes(r.kind) || typeof r.q !== 'string' || r.q.length > 200 || !/^[\w-]+\/[\w-]+$/.test(r.q)) return null;
+  const ev = { t: Number.isFinite(r.t) && r.t > 0 && r.t <= now + 86_400_000 ? Math.round(r.t) : now, q: r.q, kind: r.kind };
+  const text = typeof r.text === 'string' ? r.text.trim().slice(0, 4000) : '';
+  if (ev.kind !== 'withdraw') {
+    if (!text) return null;
+    ev.text = text;
+  }
+  if (ev.kind === 'report' && typeof r.stem === 'string' && r.stem.trim()) ev.stem = r.stem.trim().slice(0, 200);
+  return ev;
+}
+const feedbackKey = (ev) => `${ev.t}\n${ev.q}\n${ev.kind}`;
 
 // Content fingerprint: same as digest() in server.py (SHA-256 of the UTF-8 bytes, first 16 hex digits)
 export async function digest(text) {
@@ -209,6 +230,21 @@ export const local = {
     return { archived: "this phone's local storage" };
   },
 
+  async feedback(tid) {
+    const list = await tx(['feedback'], 'readonly', (t) => req(t.objectStore('feedback').index('tid').getAll(tid)));
+    list.sort((a, b) => a.t - b.t);
+    return { feedback: list.map(plain) };
+  },
+
+  async saveFeedback(tid, item) {
+    const ev = cleanFeedback({ ...item, t: undefined }, Date.now()); // the phone's clock decides the time
+    if (!ev) throw fail('Invalid report: it needs a question and some text', 400);
+    await tx(['feedback'], 'readwrite', (t) => {
+      t.objectStore('feedback').put({ ...ev, tid, local: 1 });
+    });
+    return { event: ev };
+  },
+
   async note(tid, pageId) {
     const n = await tx(['notes'], 'readonly', (t) => req(t.objectStore('notes').get([tid, pageId])));
     return { content: n?.content || '', hash: n?.hash || '', size: n?.size || 0, path: 'Saved on this phone' };
@@ -245,13 +281,17 @@ export const local = {
   },
 };
 
-// Changes sent to the computer when syncing: answer records made on the phone, edited notes, reset times, a dragged topic order,
-// plus the fingerprints of the question banks already here (the computer doesn't resend a bank whose fingerprint hasn't changed)
+// Changes sent to the computer when syncing: answer records and question reports made on the phone, edited notes, reset times,
+// a dragged topic order, plus the fingerprints of the question banks already here (the computer doesn't resend a bank whose fingerprint hasn't changed)
 export async function collectChanges() {
-  return tx(['records', 'notes', 'kv', 'topics'], 'readonly', async (t) => {
+  return tx(['records', 'feedback', 'notes', 'kv', 'topics'], 'readonly', async (t) => {
     const records = {};
     for (const r of await req(t.objectStore('records').getAll())) {
       if (r.local) (records[r.tid] = records[r.tid] || []).push(plain(r));
+    }
+    const feedback = {};
+    for (const ev of await req(t.objectStore('feedback').getAll())) {
+      if (ev.local) (feedback[ev.tid] = feedback[ev.tid] || []).push(plain(ev));
     }
     const notes = (await req(t.objectStore('notes').getAll()))
       .filter((n) => n.dirty)
@@ -263,7 +303,7 @@ export async function collectChanges() {
     const known = {};
     for (const [tid, h] of Object.entries(hashes)) if (have.has(tid)) known[tid] = h;
     const order = (await req(kv.get('topicOrder'))) || null;
-    return { records, notes, resets, known, order };
+    return { records, feedback, notes, resets, known, order };
   });
 }
 
@@ -271,7 +311,7 @@ export async function collectChanges() {
 // sentOrder is the drag time of the topic order sent this time (undefined if none was sent).
 // · Question bank: replaced when the computer sends a new version, kept when it sends none (fingerprint unchanged); topics deleted on the computer are deleted here too
 // · Reset time: the later of the two sides wins; records older than it no longer count: those from the computer are deleted, unsynced ones from the phone move to the local archive
-// · Answer records: the computer's copy is authoritative; new unsynced ones made on the phone (local) are kept and uploaded on the next sync
+// · Answer records and question reports: the computer's copy is authoritative; new unsynced ones made on the phone (local) are kept and uploaded on the next sync
 // · Notes: notes sent this time and not edited since are replaced with the computer's merged version; ones edited during the sync are kept and synced next time
 // · Topic order: use the one the computer sent back (it already merged the order that was sent); if it was dragged again during the sync, keep it and sync next time
 // Returns { topics: the topics that got new content this time }
@@ -281,11 +321,12 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
     for (const [pageId, n] of Object.entries(d.notes || {})) sizes.set(`${tid}/${pageId}`, byteSize(n.content));
   }
   const fresh = [];
-  await tx(['kv', 'topics', 'records', 'notes', 'archives'], 'readwrite', async (t) => {
+  await tx(['kv', 'topics', 'records', 'feedback', 'notes', 'archives'], 'readwrite', async (t) => {
     const now = Date.now();
     const kv = t.objectStore('kv');
     const topics = t.objectStore('topics');
     const records = t.objectStore('records');
+    const feedback = t.objectStore('feedback');
     const notes = t.objectStore('notes');
     const archives = t.objectStore('archives');
     const stash = (tid, list) => {
@@ -313,6 +354,12 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
       stash(tid, list.filter((r) => r.local)); // the computer no longer has this topic: unsynced records move to the local archive and aren't uploaded
       for (const r of list) records.delete([tid, r.t, r.q]);
     }
+    const reportsByTid = new Map();
+    for (const ev of await req(feedback.getAll())) {
+      if (!reportsByTid.has(ev.tid)) reportsByTid.set(ev.tid, []);
+      reportsByTid.get(ev.tid).push(ev);
+      if (!keep.has(ev.tid)) feedback.delete([ev.tid, ev.t, ev.q, ev.kind]); // reports on a topic the computer no longer has
+    }
 
     for (const [tid, d] of Object.entries(bundle.data || {})) {
       if (d.topic) {
@@ -336,6 +383,19 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
         } else if (!r.local) records.delete([tid, r.t, r.q]); // already deleted on the computer
       }
       stash(tid, expired);
+
+      if (Array.isArray(d.feedback)) {
+        // (a computer running an older Drillbook sends no reports: then leave the phone's as they are)
+        const reportsFromPc = new Set();
+        for (const ev of d.feedback) {
+          if (typeof ev.q !== 'string' || !Number.isFinite(ev.t) || !FEEDBACK_KINDS.includes(ev.kind)) continue;
+          feedback.put({ ...ev, tid }); // no local flag: the computer already has it
+          reportsFromPc.add(feedbackKey(ev));
+        }
+        for (const ev of reportsByTid.get(tid) || []) {
+          if (!ev.local && !reportsFromPc.has(feedbackKey(ev))) feedback.delete([tid, ev.t, ev.q, ev.kind]); // no longer on the computer
+        }
+      }
 
       const mine = new Map((await req(notes.getAll(pageRange(tid)))).map((n) => [n.pageId, n]));
       const settled = (cur) => !cur?.dirty || sent.get(`${tid}/${cur.pageId}`) === cur.hash;
@@ -378,7 +438,7 @@ export async function applyBundle(bundle, sent = new Map(), sentOrder = undefine
 
 // What was added on the phone and hasn't been merged back into the computer yet
 export async function localChanges() {
-  return tx(['records', 'notes', 'kv'], 'readonly', async (t) => {
+  return tx(['records', 'feedback', 'notes', 'kv'], 'readonly', async (t) => {
     let records = 0;
     let notes = 0;
     await new Promise((resolve, reject) => {
@@ -392,7 +452,9 @@ export async function localChanges() {
       cur.onerror = () => reject(cur.error);
     });
     for (const n of await req(t.objectStore('notes').getAll())) if (n.dirty) notes++;
+    const reported = new Set(); // questions with unsynced report changes (a report edited twice counts once)
+    for (const ev of await req(t.objectStore('feedback').getAll())) if (ev.local) reported.add(`${ev.tid}/${ev.q}`);
     const order = !!(await req(t.objectStore('kv').get('topicOrder')));
-    return { records, notes, order };
+    return { records, notes, feedback: reported.size, order };
   });
 }

@@ -117,7 +117,14 @@ async function runSync(onProgress) {
       onProgress?.('Syncing…');
       const changes = await collectChanges();
       const notes = changes.notes.map(({ hash, ...n }) => n);
-      const body = JSON.stringify({ records: changes.records, notes, resets: changes.resets, known: changes.known, order: changes.order });
+      const body = JSON.stringify({
+        records: changes.records,
+        feedback: changes.feedback,
+        notes,
+        resets: changes.resets,
+        known: changes.known,
+        order: changes.order,
+      });
       const res = await signedCall(addr, link, key, 'POST', '/api/phone/sync', body, 60000);
       if (res.bundle?.serverId !== link.serverId || !res.bundle.data) throw new Error('The computer sent back incomplete data');
       const sentNotes = new Map(changes.notes.map((n) => [`${n.tid}/${n.pageId}`, n.hash]));

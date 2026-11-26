@@ -1721,6 +1721,35 @@ html.is-sorting * {
   color: var(--text-2);
 }
 
+/* Report a badly generated question: quiet until used; amber once this question has an open report */
+.q-report {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-3);
+  line-height: 20px;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.q-report:hover {
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+.q-report.on {
+  border-color: rgba(243, 184, 87, 0.45);
+  color: var(--fair);
+}
+
+.q-report .ico {
+  width: 14px;
+  height: 14px;
+}
+
 .q-stem {
   margin-bottom: 20px;
   font-size: 17px;
@@ -2806,6 +2835,47 @@ button.rrow:hover {
 
 .dialog p {
   color: var(--text-2);
+}
+
+.dialog-text {
+  display: block;
+  width: 100%;
+  min-height: 132px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-ctl);
+  background: var(--bg-deep);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* on phones, below 16px tapping the box zooms the page in */
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.dialog-text:focus {
+  border-color: var(--signal);
+  outline: none;
+}
+
+.dialog-actions .withdraw {
+  margin-right: auto;
+  color: var(--weak);
+}
+
+.report-fixed {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13.5px;
+}
+
+.report-fixed .ico {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  color: var(--good);
 }
 
 .dialog-actions {

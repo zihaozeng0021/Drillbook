@@ -60,6 +60,11 @@ const recordsSig = (list) => `${list.length}:${list.length ? list[list.length - 
 export async function refreshRecords() {
   for (const topic of [...cache.values()]) {
     const started = Date.now();
+    try {
+      topic.reports = latestReports((await api.feedback(topic.id)).feedback); // e.g. a coding agent resolved some reports meanwhile
+    } catch {
+      /* keep the ones already loaded */
+    }
     let rec;
     try {
       rec = await api.records(topic.id);
@@ -99,8 +104,13 @@ if (!APP && typeof window !== 'undefined') {
 
 export async function getTopic(tid, force = false) {
   if (!force && cache.has(tid)) return cache.get(tid);
-  const [bank, rec] = await Promise.all([api.topic(tid), api.records(tid)]);
+  const [bank, rec, fb] = await Promise.all([
+    api.topic(tid),
+    api.records(tid),
+    api.feedback(tid).catch(() => ({ feedback: [] })), // reports are optional: the topic still opens without them
+  ]);
   const topic = build(bank, rec.records || []);
+  topic.reports = latestReports(fb.feedback);
   topic.skippedRecords = rec.skipped || 0;
   topic.recordsSig = recordsSig(rec.records || []);
   for (const r of readPending(tid)) addAttempt(topic, r);
@@ -202,6 +212,32 @@ export async function resetRecords(topic) {
   emit('records', topic);
   emit('pending', topic.id);
   return res.archived;
+}
+
+// ── Question reports ──
+// The log (data/feedback/<topic>.jsonl) holds report / withdraw / resolve events; a question's latest event is its state:
+// an open report while it's a report, and resolve carries the coding agent's note on what was fixed
+function latestReports(events) {
+  const map = new Map();
+  for (const ev of Array.isArray(events) ? events : []) map.set(ev.q, ev); // events come sorted by time
+  return map;
+}
+
+export function reportOf(topic, gid) {
+  return topic.reports?.get(gid) || null;
+}
+
+// stem: the question as plain text, saved with the report so the coding agent can tell whether it was edited since
+export async function saveReport(topic, q, text, stem) {
+  const { event } = await api.saveFeedback(topic.id, { q: q.gid, kind: 'report', text, stem });
+  topic.reports.set(q.gid, event);
+  return event;
+}
+
+export async function withdrawReport(topic, q) {
+  const { event } = await api.saveFeedback(topic.id, { q: q.gid, kind: 'withdraw' });
+  topic.reports.set(q.gid, event);
+  return event;
 }
 
 // ── Records that failed to save ──

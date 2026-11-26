@@ -9,6 +9,7 @@ Content is organized into **topics**. A topic is one learning track built from o
 - **Knowledge pages**: each topic is split into pages of knowledge points, with tables, code highlighting and formulas.
 - **Mind map** (in the sidebar under Overview): a collapsible map of the whole topic — theme groups, pages, knowledge points and the key details of each point — with every page and point colored by how well you know it. Click a node to expand it; its arrow opens the full text. Narrow screens get an indented outline instead (switch with Map / Outline). The map is written in the topic's `mindmap.md`.
 - **Practice**: every page has multiple-choice questions covering all of its knowledge points, and every answer is recorded. Choose "Don't know" to record an incorrect answer, so lucky guesses don't inflate your mastery.
+- **Report a question**: the Report button at the top right of every question opens a box for saying what's wrong with it (a wrong answer key, two correct options, a stem that gives the answer away…). Reports are saved in `data/feedback/`, and a coding agent can fix them all in one go (see below). Once a report has been handled, opening the button again shows what was changed.
 - **Review**: all questions ranked by recent error rate. Recent and repeated mistakes come first, unanswered questions sit in the middle, and questions you always get right go last. The ⓘ button on the Review page shows the formula.
 - **Notes**: a Markdown notes panel on every page, saved as `.md` files that you can also open in any editor.
 - **Edit in place**: the Edit button on a knowledge page opens that page's `knowledge.md` in an editor. Saving re-parses the page, warns when a removed knowledge point still has questions, and keeps earlier versions in the page folder's `_history/`.
@@ -43,6 +44,7 @@ An Android app that runs the same site offline on your phone and syncs with this
 The app syncs by itself when you open it, when you come back to it and before you leave it, and every few minutes while there are unsynced changes; "Sync now" syncs on demand. If it can't reach the computer, it keeps your changes and tries again later. How the two sides are merged:
 
 - **Answers** from both sides are combined; nothing is overwritten.
+- **Question reports** from both sides are combined the same way, so a report made on the phone reaches the computer.
 - **Notes**: if only one side changed a note, that version is used. If both changed it, the more recent edit wins and the other version is saved in the computer's `data/notes/<topic>/_history/<page>/` (file name ending in `-phone` or `-pc`); the app tells you when this happens.
 - **Resetting a topic's answers** on either side resets it on both after the next sync. The computer moves its old answers to `data/records/archive/`.
 - **Topic order**: if only one side reordered the topics, that order is used. If both did, the more recent one wins and the app tells you.
@@ -71,7 +73,7 @@ The phone and the computer must be on the same Wi-Fi. School and café networks 
    (attach the slides, or paste the syllabus)
    ```
 
-   You can also mention the level or purpose (interview, exam, self-study) and the areas to focus on. The content is written in the language of your request; if that isn't English, every core term gets its English name in parentheses. To add a mind map to a topic that doesn't have one yet: `Follow AGENTS.md and write the mind map for the topic (topic name)`.
+   You can also mention the level or purpose (interview, exam, self-study) and the areas to focus on. The content is written in the language of your request; if that isn't English, every core term gets its English name in parentheses. To add a mind map to a topic that doesn't have one yet: `Follow AGENTS.md and write the mind map for the topic (topic name)`. To fix the questions you reported while practicing: `Follow AGENTS.md and fix the reported questions`; the agent marks each report as handled with a note on what it changed.
 3. The agent compares the source with the topics already here. If a similar topic exists (a related role, another edition of the same book, the same course), it shows you the overlap and asks whether to merge into that topic or create a new one. If you already know where the content should go, say so in the request and it will not ask.
 4. Refresh the browser to see the new pages.
 
@@ -82,6 +84,7 @@ The phone and the computer must be on the same Wi-Fi. School and café networks 
 | `data/topics/` | Topics, pages, knowledge points and questions (format described in `AGENTS.md`) |
 | `data/records/` | Your answers, one line per answer; `resets.json` notes when each topic's answers were last reset |
 | `data/notes/` | Your notes, one `.md` file per page; older versions in `_history/` |
+| `data/feedback/` | Your question reports: one line per report, edit, withdrawal or fix |
 
 To back up, copy `data/`. The "Reset answer records" link at the bottom of a topic's overview moves old records to `data/records/archive/` instead of deleting them.
 
@@ -103,6 +106,7 @@ Only `data/topics/sample/` is included in Git. Other topic folders, all answer h
 ```text
 python server.py --check      Check the question bank for format problems
 python server.py --outline    List every topic, page and knowledge point
+python server.py --feedback   List the questions you reported that haven't been fixed yet
 python server.py --port 9000  Use a different port
 ```
 

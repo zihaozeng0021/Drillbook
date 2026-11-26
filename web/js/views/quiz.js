@@ -1,7 +1,8 @@
 // Quiz component shared by page practice and Review
 // Keys: A–H or 1–8 pick an option, 0 picks Don't know, Enter submits / goes to the next question, ← → switch questions
+// Report (top right of each question): flag a badly generated question with a note; reports go to data/feedback/ for a coding agent to fix
 
-import { h, icon, kbd, prefs, plainText, historyMarks } from '../ui.js';
+import { h, icon, kbd, prefs, plainText, historyMarks, textDialog, toast, relTime } from '../ui.js';
 import { md, mdInline } from '../md.js';
 import * as store from '../store.js';
 import { STATE_LABEL } from '../rank.js';
@@ -190,6 +191,7 @@ export function mountQuiz(container, topic, initial, opts = {}) {
         session.mode !== 'page'
           ? h('a', { class: 'q-page', href: `#/p/${enc(topic.id)}/page/${enc(page.id)}` }, h('span', { class: 'num' }, page.no), page.title)
           : null,
+        reportButton(q),
       ),
       h('div', { class: 'q-stem md', html: md(q.stem) }),
       h(
@@ -210,6 +212,52 @@ export function mountQuiz(container, topic, initial, opts = {}) {
     );
 
     return h('div', { class: 'quiz-q' }, top, card, submitted ? feedback(q, a) : null, actions);
+  }
+
+  // ── Reporting a badly generated question ──
+  function reportButton(q) {
+    const open = store.reportOf(topic, q.gid)?.kind === 'report';
+    const tip = open ? 'You reported this question: edit or withdraw the report' : 'Report a problem with this question';
+    return h(
+      'button',
+      { class: `q-report${open ? ' on' : ''}`, type: 'button', 'aria-label': tip, 'data-tip': tip, onclick: () => openReport(q) },
+      icon('flag'),
+      open ? 'Reported' : 'Report',
+    );
+  }
+
+  async function openReport(q) {
+    const last = store.reportOf(topic, q.gid);
+    const open = last?.kind === 'report';
+    const fixed =
+      last?.kind === 'resolve'
+        ? h('p', { class: 'report-fixed' }, icon('check'), h('span', null, `Your earlier report was handled ${relTime(last.t)}: ${last.text}`))
+        : null;
+    const res = await textDialog({
+      title: open ? 'Your report on this question' : 'Report this question',
+      intro: "What's wrong with it? Reports are saved so a coding agent can fix the reported questions later.",
+      extra: fixed,
+      value: open ? last.text : '',
+      placeholder: 'e.g. two options are both correct; the explanation contradicts the knowledge point; the stem gives the answer away',
+      actions: [
+        ...(open ? [{ label: 'Withdraw report', value: 'withdraw', kind: 'ghost withdraw' }] : []),
+        { label: 'Cancel', value: null },
+        { label: open ? 'Save' : 'Send report', value: 'save', kind: 'primary', needsText: true },
+      ],
+    });
+    if (!res) return;
+    try {
+      if (res.action === 'withdraw') {
+        await store.withdrawReport(topic, q);
+        toast('Report withdrawn', 'ok');
+      } else if (!open || res.text !== last.text) {
+        await store.saveReport(topic, q, res.text, plainText(q.stem, 200));
+        toast(open ? 'Report updated' : 'Report saved', 'ok');
+      }
+    } catch (e) {
+      toast(`Couldn't save the report: ${e.message}`, 'bad', 5000);
+    }
+    if (cur() === q && !session.finished) render();
   }
 
   function feedback(q, a) {

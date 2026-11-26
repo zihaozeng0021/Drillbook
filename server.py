@@ -9,6 +9,8 @@ Usage:
   python server.py --no-browser  don't open the browser
   python server.py --check       only check the topic files and print the problems; don't start the server
   python server.py --outline     list all topics → pages → knowledge points (with question counts per point); don't start the server
+  python server.py --feedback    list the open question reports (problems the user flagged while practicing)
+  python server.py --resolve <topic> <page>/<question> "what changed"   close a report after fixing the question
 
 Layout (data formats: see AGENTS.md):
   web/                         front end
@@ -16,6 +18,7 @@ Layout (data formats: see AGENTS.md):
                                (the old names data/positions/, position.json and jd.md still work)
   data/records/<topic>.jsonl   answer records (one answer per line, appended automatically)
   data/notes/<topic>/<page>.md page notes (edited and autosaved in the web page; can also be opened in any editor)
+  data/feedback/<topic>.jsonl  question reports (one event per line: report / withdraw / resolve)
   data/topics/<topic>/pages/<page>/_history/  old versions kept automatically when knowledge.md is edited in the web page (ignored when loading)
   .local/                      local config (not in git): the phone connection switch and paired phones, the Android app signing key
   android/                     Android app (phone version): build with python android/build.py, output android/build/drillbook.apk
@@ -66,6 +69,10 @@ KIND_LABEL = {"job": "Job", "book": "Book", "course": "Course", "exam": "Exam"}
 RECORDS_DIR = DATA_DIR / "records"
 ARCHIVE_DIR = RECORDS_DIR / "archive"
 NOTES_DIR = DATA_DIR / "notes"
+FEEDBACK_DIR = DATA_DIR / "feedback"
+FEEDBACK_KINDS = ("report", "withdraw", "resolve")
+FEEDBACK_TEXT_MAX = 4000   # characters kept from a report or a resolution note
+FEEDBACK_STEM_MAX = 200    # characters kept from the question as the user saw it
 NOTE_HISTORY_KEEP = 30     # old versions kept per page for notes / knowledge files
 NOTE_SNAPSHOT_GAP = 600    # during continuous editing, keep at most one old version per this many seconds
 LOCAL_DIR = ROOT / ".local"             # local config, not in git
@@ -81,6 +88,7 @@ NONCE_MAX = 64             # max number of nonces valid at the same time
 LAN_NETS = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 ID_RE = re.compile(r"^[\w-]+$")                      # topic / page / knowledge point / question id
+GID_RE = re.compile(r"^[\w-]+/[\w-]+$")              # a question within a topic: page-id/question-id
 TITLE_RE = re.compile(r"^#\s+(.+?)\s*$")              # first line of knowledge.md: # Page title
 POINT_RE = re.compile(r"^##\s+(.+?)\s*(?:\{#([\w-]+)\})?\s*$")  # ## Knowledge point title {#id}
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
@@ -107,6 +115,7 @@ MIME = {
 }
 
 records_lock = threading.Lock()
+feedback_lock = threading.Lock()
 notes_lock = threading.Lock()
 knowledge_lock = threading.Lock()
 
@@ -735,6 +744,83 @@ def archive_before_locked(tid: str, cutoff: int) -> int:
     return len(old)
 
 
+# ───────────────────────────── Question reports ─────────────────────────────
+# data/feedback/<topic>.jsonl is an append-only log, one event per line:
+#   {"t": ms, "q": "page/q01", "kind": "report", "text": "what's wrong", "stem": "the question as the user saw it"}
+#   {"t": ms, "q": "page/q01", "kind": "withdraw"}                             the user took the report back
+#   {"t": ms, "q": "page/q01", "kind": "resolve", "text": "what was changed"}  closed by a coding agent (--resolve)
+# A question's state is its latest event: it has an open report while that event is a report.
+# Phone sync merges the logs like answer records (same time + question + kind counts as one event).
+
+def feedback_file(tid: str) -> Path:
+    return FEEDBACK_DIR / f"{tid}.jsonl"
+
+
+def clean_feedback(r, now: int) -> dict | None:
+    """Validates one event; returns the cleaned event, or None if it isn't a valid one. A missing or implausible time becomes now."""
+    if not isinstance(r, dict) or r.get("kind") not in FEEDBACK_KINDS:
+        return None
+    q = r.get("q")
+    if not isinstance(q, str) or len(q) > 200 or not GID_RE.match(q):
+        return None
+    t = r.get("t")
+    ev = {"t": int(t) if isinstance(t, (int, float)) and 0 < t <= now + 86_400_000 else now, "q": q, "kind": r["kind"]}
+    text = r.get("text").strip()[:FEEDBACK_TEXT_MAX] if isinstance(r.get("text"), str) else ""
+    if ev["kind"] != "withdraw":
+        if not text:
+            return None  # a report says what's wrong; a resolution says what was done
+        ev["text"] = text
+    stem = r.get("stem")
+    if ev["kind"] == "report" and isinstance(stem, str) and stem.strip():
+        ev["stem"] = stem.strip()[:FEEDBACK_STEM_MAX]
+    return ev
+
+
+def read_feedback(tid: str) -> list[dict]:
+    path = feedback_file(tid)
+    if not path.exists():
+        return []
+    with feedback_lock:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    now = int(time.time() * 1000)
+    out = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        ev = clean_feedback(r, now)
+        if ev and isinstance(r.get("t"), (int, float)):
+            out.append(ev)
+    out.sort(key=lambda e: e["t"])  # stable: events in the same millisecond keep their order in the file
+    return out
+
+
+def append_feedback(tid: str, items: list) -> list[dict]:
+    now = int(time.time() * 1000)
+    clean = [ev for ev in (clean_feedback(r, now) for r in items) if ev]
+    if not clean:
+        return []
+    with feedback_lock:
+        FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
+        with feedback_file(tid).open("a", encoding="utf-8", newline="\n") as f:
+            for ev in clean:
+                f.write(json.dumps(ev, ensure_ascii=False, separators=(",", ":")) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+    return clean
+
+
+def open_reports(tid: str) -> list[dict]:
+    """Questions whose latest event is a report, i.e. reports nobody has withdrawn or resolved yet."""
+    latest: dict[str, dict] = {}
+    for ev in read_feedback(tid):
+        latest[ev["q"]] = ev
+    return [ev for ev in latest.values() if ev["kind"] == "report"]
+
+
 # ───────────────────────────── Page notes ─────────────────────────────
 
 def page_ids(tdir: Path) -> set[str]:
@@ -921,8 +1007,8 @@ def topic_fingerprint(p: dict) -> str:
 
 
 def phone_bundle(server_id: str, known=None) -> dict:
-    """All of the computer's data that the phone receives: topics (parsed), answer records, notes, reset times.
-    known holds the fingerprints the phone already has {topic: fingerprint}; for unchanged topics only records and notes are sent."""
+    """All of the computer's data that the phone receives: topics (parsed), answer records, question reports, notes, reset times.
+    known holds the fingerprints the phone already has {topic: fingerprint}; for unchanged topics only records, reports and notes are sent."""
     known = known if isinstance(known, dict) else {}
     topics, data = [], {}
     for p in all_topics():
@@ -937,7 +1023,13 @@ def phone_bundle(server_id: str, known=None) -> dict:
                 notes[pg["id"]] = {"content": decode_note(raw), "hash": digest(raw), "mtime": mtime}
         fp = topic_fingerprint(p)
         topics.append(topic_summary(p))
-        data[tid] = {"topic": None if known.get(tid) == fp else p, "hash": fp, "records": read_records(tid)[0], "notes": notes}
+        data[tid] = {
+            "topic": None if known.get(tid) == fp else p,
+            "hash": fp,
+            "records": read_records(tid)[0],
+            "feedback": read_feedback(tid),
+            "notes": notes,
+        }
     topics.sort(key=lambda p: (p["order"], p["name"]))
     return {
         "app": "drillbook",
@@ -991,11 +1083,12 @@ def merge_phone_note(tid: str, page_id: str, content: str, base, updated_at, pag
 
 
 def apply_phone_sync(body: dict) -> dict:
-    """Merge the phone's changes into the computer: resets, answer records, notes, topic order. Returns the merge report.
+    """Merge the phone's changes into the computer: resets, answer records, question reports, notes, topic order. Returns the merge report.
     · The later reset of the two sides wins; if the phone's is later, older records on the computer move to data/records/archive/
     · Answer records from both sides are combined, same time + same question counting as one; records before the reset time are dropped
+    · Question reports from both sides are combined the same way (same time + question + kind counting as one); resets don't touch them
     · Notes: see merge_phone_note; topic order: see merge_phone_order"""
-    report: dict = {"records": 0, "notes": [], "conflicts": [], "resets": [], "order": None}
+    report: dict = {"records": 0, "feedback": 0, "notes": [], "conflicts": [], "resets": [], "order": None}
     topics = {d.name: d for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)}
     now = int(time.time() * 1000)
 
@@ -1029,6 +1122,22 @@ def apply_phone_sync(body: dict) -> dict:
             fresh.append(r)
         report["records"] += append_records(tid, fresh)
 
+    reports = body.get("feedback") if isinstance(body.get("feedback"), dict) else {}
+    for tid, items in reports.items():
+        if tid not in topics or not isinstance(items, list):
+            continue
+        seen = {(e["t"], e["q"], e["kind"]) for e in read_feedback(tid)}
+        fresh = []
+        for r in items:
+            ev = clean_feedback(r, now)
+            if not ev or not isinstance(r.get("t"), (int, float)):
+                continue
+            key = (ev["t"], ev["q"], ev["kind"])
+            if key not in seen:
+                seen.add(key)
+                fresh.append(ev)
+        report["feedback"] += len(append_feedback(tid, fresh))
+
     for n in body.get("notes") if isinstance(body.get("notes"), list) else []:
         if not isinstance(n, dict):
             continue
@@ -1049,6 +1158,8 @@ def log_sync(device: dict, report: dict) -> None:
     parts = []
     if report["records"]:
         parts.append(plural(report["records"], "answer record"))
+    if report.get("feedback"):
+        parts.append(plural(report["feedback"], "question report event"))
     if report["notes"]:
         parts.append(plural(len(report["notes"]), "note"))
     if report["resets"]:
@@ -1428,6 +1539,21 @@ class Handler(ApiMixin, SimpleHTTPRequestHandler):
                 if method == "POST" and parts[2:] == ["archive"]:
                     return self.send_json({"archived": archive_records(tid)})
 
+            if len(parts) == 2 and parts[0] == "feedback":
+                tid = parts[1]
+                if not topic_dir(tid):
+                    return self.send_json({"error": "Topic not found"}, 404)
+                if method == "GET":
+                    return self.send_json({"feedback": read_feedback(tid)})
+                if method == "POST":
+                    body = self.read_body()
+                    if not isinstance(body, dict):
+                        return self.send_json({"error": "Missing the report"}, 400)
+                    saved = append_feedback(tid, [{k: v for k, v in body.items() if k != "t"}])  # this computer's clock decides the time
+                    if not saved:
+                        return self.send_json({"error": "Invalid report: it needs a question and some text"}, 400)
+                    return self.send_json({"event": saved[0]})
+
             if len(parts) == 3 and parts[0] == "notes":
                 tid, page_id = parts[1], parts[2]
                 tdir = topic_dir(tid)
@@ -1573,6 +1699,9 @@ def run_outline() -> int:
         print(f"  Source: {p['path']}/{p['sourceFile']}" if p["source"] else "  Source: none")
         mm = p["mindmap"]
         print(f"  Mind map: {p['path']}/{MINDMAP_FILE} ({plural(count_nodes(mm) - 1, 'node')})" if mm else "  Mind map: none")
+        n_open = len(open_reports(p["id"]))
+        if n_open:
+            print(f"  Question reports: {plural(n_open, 'open report')}; run --feedback to see {'it' if n_open == 1 else 'them'}")
         for pg in p["pages"]:
             counts: dict[str, int] = {}
             for q in pg["questions"]:
@@ -1588,18 +1717,106 @@ def run_outline() -> int:
     return 0
 
 
+def plain_text(md: str, limit: int = 200) -> str:
+    """A question's Markdown as one line of plain text (for listings)."""
+    s = re.sub(r"```.*?```", " [code] ", md, flags=re.S)
+    s = re.sub(r"`([^`]*)`", r"\1", s)
+    s = re.sub(r"[*_#>|]", "", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s if len(s) <= limit else s[: limit - 1] + "…"
+
+
+def squash(s: str) -> str:
+    """Letters and digits only, for comparing two renderings of the same question text."""
+    return re.sub(r"\W+", "", s).lower()[:60]
+
+
+def run_feedback(only: str | None) -> int:
+    """List the open question reports, for the user or a coding agent that is going to fix the questions."""
+    topics = sorted((load_topic(d) for d in visible_dirs(TOPICS_DIR) if ID_RE.match(d.name)), key=lambda p: (p["order"], p["name"]))
+    if only:
+        topics = [p for p in topics if p["id"] == only]
+        if not topics:
+            print(f"No topic with the id {only!r}")
+            return 1
+    total = 0
+    for p in topics:
+        reports = open_reports(p["id"])
+        if not reports:
+            continue
+        total += len(reports)
+        where = {}
+        for i, pg in enumerate(p["pages"]):
+            for q in pg["questions"]:
+                where[q["gid"]] = (i, pg, q)
+        reports.sort(key=lambda ev: (where[ev["q"]][0] if ev["q"] in where else len(p["pages"]), ev["q"]))
+        print(f"[{p['id']}] {p['name']}: {plural(len(reports), 'open report')}")
+        for ev in reports:
+            print(f"  {ev['q']} · reported {datetime.fromtimestamp(ev['t'] / 1000):%Y-%m-%d %H:%M}")
+            found = where.get(ev["q"])
+            if found:
+                _, pg, q = found
+                print(f"    File:     {p['path']}/pages/{pg['dir']}/questions.json")
+                stem = plain_text(q["stem"])
+                print(f"    Question: {stem}")
+                seen = ev.get("stem") or ""
+                if seen and squash(seen) != squash(stem):  # edited since the report: maybe already fixed
+                    print(f"    When reported it read: {seen}")
+            else:
+                print("    Question: no longer exists (resolve the report with a note)")
+                if ev.get("stem"):
+                    print(f"    When reported it read: {ev['stem']}")
+            lines = ev["text"].splitlines() or [""]
+            print(f"    Report:   {lines[0]}")
+            for line in lines[1:]:
+                print(f"              {line}")
+        print()
+    if not total:
+        print("No open question reports.")
+    else:
+        print('After fixing a question, close its report: python server.py --resolve <topic> <page>/<question> "what changed"')
+    return 0
+
+
+def run_resolve(tid: str, gid: str, note: str) -> int:
+    """Close an open report: appends a resolve event with a note on what was changed (or why nothing was)."""
+    if not topic_dir(tid):
+        print(f"No topic with the id {tid!r}")
+        return 1
+    if not any(ev["q"] == gid for ev in open_reports(tid)):
+        print(f"{tid} has no open report for {gid!r} (run --feedback to list them)")
+        return 1
+    if not note.strip():
+        print("Add a note on what was changed, or why nothing was")
+        return 1
+    append_feedback(tid, [{"q": gid, "kind": "resolve", "text": note}])
+    print(f"Resolved the report on {tid} {gid}")
+    return 0
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Drillbook local server")
     ap.add_argument("--port", type=int, default=8765, help="port (default 8765)")
     ap.add_argument("--no-browser", action="store_true", help="don't open the browser")
     ap.add_argument("--check", action="store_true", help="only check the topic files")
     ap.add_argument("--outline", action="store_true", help="list all topics, pages and knowledge points")
+    ap.add_argument("--feedback", nargs="?", const="", metavar="TOPIC", help="list the open question reports (all topics, or one)")
+    ap.add_argument(
+        "--resolve",
+        nargs=3,
+        metavar=("TOPIC", "QUESTION", "NOTE"),
+        help='close a question report after fixing it, e.g. --resolve ai6130 pretraining/q07 "corrected the head count"',
+    )
     args = ap.parse_args()
 
     if args.check:
         sys.exit(run_check())
     if args.outline:
         sys.exit(run_outline())
+    if args.feedback is not None:
+        sys.exit(run_feedback(args.feedback or None))
+    if args.resolve:
+        sys.exit(run_resolve(*args.resolve))
 
     TOPICS_DIR.mkdir(parents=True, exist_ok=True)
     RECORDS_DIR.mkdir(parents=True, exist_ok=True)
